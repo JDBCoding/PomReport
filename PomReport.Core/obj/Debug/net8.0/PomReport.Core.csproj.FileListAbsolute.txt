@@ -1,0 +1,11 @@
+\\nw\data\NewGen_TKR_FC\Industrial Engineering\Server 5S Structure\23.0 EDC\POM_New_Build\PomReport\PomReport.Core\bin\Debug\net8.0\PomReport.Core.deps.json
+\\nw\data\NewGen_TKR_FC\Industrial Engineering\Server 5S Structure\23.0 EDC\POM_New_Build\PomReport\PomReport.Core\bin\Debug\net8.0\PomReport.Core.dll
+\\nw\data\NewGen_TKR_FC\Industrial Engineering\Server 5S Structure\23.0 EDC\POM_New_Build\PomReport\PomReport.Core\bin\Debug\net8.0\PomReport.Core.pdb
+\\nw\data\NewGen_TKR_FC\Industrial Engineering\Server 5S Structure\23.0 EDC\POM_New_Build\PomReport\PomReport.Core\obj\Debug\net8.0\PomReport.Core.GeneratedMSBuildEditorConfig.editorconfig
+\\nw\data\NewGen_TKR_FC\Industrial Engineering\Server 5S Structure\23.0 EDC\POM_New_Build\PomReport\PomReport.Core\obj\Debug\net8.0\PomReport.Core.AssemblyInfoInputs.cache
+\\nw\data\NewGen_TKR_FC\Industrial Engineering\Server 5S Structure\23.0 EDC\POM_New_Build\PomReport\PomReport.Core\obj\Debug\net8.0\PomReport.Core.AssemblyInfo.cs
+\\nw\data\NewGen_TKR_FC\Industrial Engineering\Server 5S Structure\23.0 EDC\POM_New_Build\PomReport\PomReport.Core\obj\Debug\net8.0\PomReport.Core.csproj.CoreCompileInputs.cache
+\\nw\data\NewGen_TKR_FC\Industrial Engineering\Server 5S Structure\23.0 EDC\POM_New_Build\PomReport\PomReport.Core\obj\Debug\net8.0\PomReport.Core.dll
+\\nw\data\NewGen_TKR_FC\Industrial Engineering\Server 5S Structure\23.0 EDC\POM_New_Build\PomReport\PomReport.Core\obj\Debug\net8.0\refint\PomReport.Core.dll
+\\nw\data\NewGen_TKR_FC\Industrial Engineering\Server 5S Structure\23.0 EDC\POM_New_Build\PomReport\PomReport.Core\obj\Debug\net8.0\PomReport.Core.pdb
+\\nw\data\NewGen_TKR_FC\Industrial Engineering\Server 5S Structure\23.0 EDC\POM_New_Build\PomReport\PomReport.Core\obj\Debug\net8.0\ref\PomReport.Core.dll

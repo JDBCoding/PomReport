@@ -1,0 +1,13 @@
+root = true
+[*.cs]
+indent_style = space
+indent_size = 4
+# Remove extra blank lines
+csharp_new_line_before_open_brace = none
+csharp_new_line_between_query_expression_clauses = false
+# Keep usings tight
+dotnet_separate_import_directive_groups = false
+dotnet_sort_system_directives_first = true
+# Reduce spacing noise
+csharp_preserve_single_line_blocks = true
+csharp_preserve_single_line_statements = true
