@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PomReport.Config")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+cec0b4951e75d6c16d16fe53bf2e09ecaf5cd704")]
 [assembly: System.Reflection.AssemblyProductAttribute("PomReport.Config")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PomReport.Config")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
