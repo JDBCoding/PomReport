@@ -1,0 +1,63 @@
+"Server=pbebdsmessier.nos.boeing.com;" +
+"Database=Newton_Release;" +
+"User ID=SvcIedwhExcel;" +
+"Password=0x9F4DE51F3477553AE46A752DD6B66FCEE;" +
+"Encrypt=True;" +
+"TrustServerCertificate=True;";
+
+
+
+ConnectionString: Server=pbebdsmessier.nos.boeing.com;Database=Newton_Release;User ID=SvcIedwhExcel;Password=0x9F4DE51F3477553AE46A752DD6B66FCE;Encrypt=true;TrustServerCertificate=True;
+
+CONNECTED ✅
+Server   : PBEBDSMESSIER
+Database : Newton_Release
+SYSTEM_USER  : SvcIedwhExcel
+SUSER_SNAME(): SvcIedwhExcel
+
+
+using System;
+using System.Data.SqlClient;
+using System.Windows.Forms;
+namespace PomReport.Data
+
+using System;
+using System.Data.SqlClient;
+namespace PomReport.Data
+{
+   public static class SqlJobSource
+   {
+       // Central connection string
+       public static string GetConn()
+       {
+           return
+               "Server=pbebdsmessier.nos.boeing.com;" +
+               "Database=Newton_Release;" +
+               "User ID=SvcIedwhExcel;" +
+               "Password=0x9F4DE51F3477553AE46A752DD6B66FCEE;" +
+               "Encrypt=True;" +
+               "TrustServerCertificate=True;";
+       }
+       // Pure data-layer test — NO UI
+       public static (string Server, string Database, string SystemUser, string LoginName)
+           TestConnection(string connString)
+       {
+           using var conn = new SqlConnection(connString);
+           conn.Open();
+           using var cmd = conn.CreateCommand();
+           cmd.CommandText =
+               "SELECT @@SERVERNAME AS ServerName, DB_NAME() AS DbName, SYSTEM_USER AS SystemUser, SUSER_SNAME() AS LoginName";
+           using var reader = cmd.ExecuteReader();
+           if (!reader.Read())
+               throw new Exception("Connection succeeded but no data returned.");
+           return (
+               reader["ServerName"].ToString()!,
+               reader["DbName"].ToString()!,
+               reader["SystemUser"].ToString()!,
+               reader["LoginName"].ToString()!
+           );
+       }
+   }
+}
+
+   
