@@ -1,14 +1,10 @@
 using System;
 
+using System.Linq;
+
 using System.Windows.Forms;
 
-// IMPORTANT: make sure this matches where SqlJobSource lives.
-
-// If SqlJobSource is in PomReport.Data.Sql namespace, keep this using.
-
-// If it’s in a different namespace, adjust accordingly.
-
-using PomReport.Data.Sql;
+using PomReport.Config;
 
 namespace PomReport.App
 
@@ -28,6 +24,12 @@ namespace PomReport.App
 
         // This method MUST exist because Form1.Designer.cs is wired to it.
 
+        // Right now it will:
+
+        // 1) Ensure config exists (launch SetupForm if not)
+
+        // 2) Load config and write what we have into your log textbox
+
         private void btnPull_Click(object sender, EventArgs e)
 
         {
@@ -36,37 +38,81 @@ namespace PomReport.App
 
             {
 
-                // 1) Get the connection string (from your local file / whatever your SqlJobSource does)
+                // Step 1: Ensure config exists (first run -> setup)
 
-                string connString = SqlJobSource.GetConn();
+                if (!ConfigStore.Exists())
 
-                // 2) Test the connection + identity
+                {
 
-                var result = SqlJobSource.TestConnection(connString);
+                    using var setup = new SetupForm();
 
-                // 3) Show what we connected as
+                    if (setup.ShowDialog(this) != DialogResult.OK)
 
-                MessageBox.Show(
+                        return; // user cancelled
 
-                    $"CONNECTED ✅\n\n" +
+                }
 
-                    $"Server: {result.Server}\n" +
+                // Step 2: Load config
 
-                    $"Database: {result.Database}\n" +
+                var cfg = ConfigStore.Load();
 
-                    $"SYSTEM_USER: {result.SystemUser}\n" +
+                // Step 3: Display something useful in your existing UI
 
-                    $"SUSER_SNAME(): {result.LoginName}",
+                // Your designer shows a control named "log"
 
-                    "SQL Test",
+                // and a preview textbox named "textQueryPreview" (optional)
 
-                    MessageBoxButtons.OK,
+                log.Clear();
 
-                    MessageBoxIcon.Information
+                log.AppendText($"Shop: {cfg.ShopName}{Environment.NewLine}");
 
-                );
+                log.AppendText($"Config: {ConfigStore.ConfigPath}{Environment.NewLine}{Environment.NewLine}");
 
-                // TODO: after this passes, we can run your actual pull/report logic here.
+                log.AppendText("VH/VZ pairs:" + Environment.NewLine);
+
+                foreach (var a in cfg.Airplanes)
+
+                {
+
+                    var loc = string.IsNullOrWhiteSpace(a.Location) ? "" : $" | {a.Location}";
+
+                    log.AppendText($"  {a.Vh} = {a.Vz}{loc}{Environment.NewLine}");
+
+                }
+
+                log.AppendText(Environment.NewLine + "Job Categories:" + Environment.NewLine);
+
+                foreach (var j in cfg.JobCategories)
+
+                {
+
+                    log.AppendText($"  {j.Ip} = {j.Category}{Environment.NewLine}");
+
+                }
+
+                // Optional: show a quick “next step” query preview placeholder
+
+                // (only if your form has textQueryPreview)
+
+                if (textQueryPreview != null)
+
+                {
+
+                    var vhList = cfg.Airplanes.Select(x => x.Vh).ToList();
+
+                    var vzList = cfg.Airplanes.Select(x => x.Vz).ToList();
+
+                    textQueryPreview.Text =
+
+                        "-- NEXT: We'll parameterize this properly. For now, proof of inputs.\r\n" +
+
+                        $"-- VH count: {vhList.Count}, VZ count: {vzList.Count}\r\n" +
+
+                        $"-- Example VH: {string.Join(", ", vhList.Take(5))}\r\n" +
+
+                        $"-- Example VZ: {string.Join(", ", vzList.Take(5))}\r\n";
+
+                }
 
             }
 
@@ -74,17 +120,7 @@ namespace PomReport.App
 
             {
 
-                MessageBox.Show(
-
-                    $"FAILED ❌\n\n{ex.Message}",
-
-                    "SQL Test",
-
-                    MessageBoxButtons.OK,
-
-                    MessageBoxIcon.Error
-
-                );
+                MessageBox.Show(ex.Message, "PomReport", MessageBoxButtons.OK, MessageBoxIcon.Error);
 
             }
 

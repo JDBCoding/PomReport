@@ -1,16 +1,26 @@
-namespace PomReport.App;
-
-static class Program
+using System;
+using System.Windows.Forms;
+using PomReport.Config;
+namespace PomReport.App
 {
-    /// <summary>
-    ///  The main entry point for the application.
-    /// </summary>
-    [STAThread]
-    static void Main()
-    {
-        // To customize application configuration such as set high DPI settings or default font,
-        // see https://aka.ms/applicationconfiguration.
-        ApplicationConfiguration.Initialize();
-        Application.Run(new Form1());
-    }    
+   internal static class Program
+   {
+       [STAThread]
+       static void Main()
+       {
+           ApplicationConfiguration.Initialize();
+           // First-run setup: if config.json doesn't exist next to EXE, run SetupForm
+           if (!ConfigStore.Exists())
+           {
+               using var setup = new SetupForm();
+               var result = setup.ShowDialog();
+               if (result != DialogResult.OK)
+               {
+                   // User cancelled setup
+                   return;
+               }
+           }
+           Application.Run(new Form1());
+       }
+   }
 }
