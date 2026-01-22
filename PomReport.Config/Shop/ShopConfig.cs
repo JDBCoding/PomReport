@@ -57,6 +57,7 @@ namespace PomReport.Config.Shop
    }
    public sealed class SqlConfig
    {
+       public string ConnectionString { get; set; } = "";
        public string Program { get; set; } = "842";
        public string SourceSystem { get; set; } = "MES";
        public string MbuName { get; set; } = "EDC";

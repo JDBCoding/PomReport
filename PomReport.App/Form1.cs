@@ -1,10 +1,20 @@
 using System;
 
+using System.Collections.Generic;
+
+using System.IO;
+
 using System.Linq;
+
+using System.Reflection;
+
+using System.Threading.Tasks;
 
 using System.Windows.Forms;
 
 using PomReport.Config;
+
+using PomReport.Data.Sql;
 
 namespace PomReport.App
 
@@ -22,23 +32,21 @@ namespace PomReport.App
 
         }
 
-        // This method MUST exist because Form1.Designer.cs is wired to it.
+        // IMPORTANT: Designer is wired to this name.
 
-        // Right now it will:
-
-        // 1) Ensure config exists (launch SetupForm if not)
-
-        // 2) Load config and write what we have into your log textbox
-
-        private void btnPull_Click(object sender, EventArgs e)
+        private async void btnPull_Click(object sender, EventArgs e)
 
         {
+
+            // Disable button so user can’t double-click and start 2 pulls
+
+            btnPull.Enabled = false;
 
             try
 
             {
 
-                // Step 1: Ensure config exists (first run -> setup)
+                // 1) Ensure config exists
 
                 if (!ConfigStore.Exists())
 
@@ -48,27 +56,23 @@ namespace PomReport.App
 
                     if (setup.ShowDialog(this) != DialogResult.OK)
 
-                        return; // user cancelled
+                        return;
 
                 }
 
-                // Step 2: Load config
+                // 2) Load config
 
                 var cfg = ConfigStore.Load();
 
-                // Step 3: Display something useful in your existing UI
+                // 3) Log current config contents (same as before)
 
-                // Your designer shows a control named "log"
+                _log.Clear();
 
-                // and a preview textbox named "textQueryPreview" (optional)
+                _log.AppendText($"Shop: {cfg.ShopName}{Environment.NewLine}");
 
-                log.Clear();
+                _log.AppendText($"Config: {ConfigStore.ConfigPath}{Environment.NewLine}{Environment.NewLine}");
 
-                log.AppendText($"Shop: {cfg.ShopName}{Environment.NewLine}");
-
-                log.AppendText($"Config: {ConfigStore.ConfigPath}{Environment.NewLine}{Environment.NewLine}");
-
-                log.AppendText("VH/VZ pairs:" + Environment.NewLine);
+                _log.AppendText("VH/VZ pairs:" + Environment.NewLine);
 
                 foreach (var a in cfg.Airplanes)
 
@@ -76,23 +80,21 @@ namespace PomReport.App
 
                     var loc = string.IsNullOrWhiteSpace(a.Location) ? "" : $" | {a.Location}";
 
-                    log.AppendText($"  {a.Vh} = {a.Vz}{loc}{Environment.NewLine}");
+                    _log.AppendText($"  {a.Vh} = {a.Vz}{loc}{Environment.NewLine}");
 
                 }
 
-                log.AppendText(Environment.NewLine + "Job Categories:" + Environment.NewLine);
+                _log.AppendText(Environment.NewLine + "Job Categories:" + Environment.NewLine);
 
                 foreach (var j in cfg.JobCategories)
 
                 {
 
-                    log.AppendText($"  {j.Ip} = {j.Category}{Environment.NewLine}");
+                    _log.AppendText($"  {j.Ip} = {j.Category}{Environment.NewLine}");
 
                 }
 
-                // Optional: show a quick “next step” query preview placeholder
-
-                // (only if your form has textQueryPreview)
+                // Optional: show preview area if it exists
 
                 if (textQueryPreview != null)
 
@@ -104,7 +106,7 @@ namespace PomReport.App
 
                     textQueryPreview.Text =
 
-                        "-- NEXT: We'll parameterize this properly. For now, proof of inputs.\r\n" +
+                        "-- Inputs loaded from config\r\n" +
 
                         $"-- VH count: {vhList.Count}, VZ count: {vzList.Count}\r\n" +
 
@@ -114,15 +116,177 @@ namespace PomReport.App
 
                 }
 
+                // 4) Build the line-number list
+
+                // Default behavior: use all VH + all VZ as line numbers (distinct)
+
+                var lineNumbers = new List<string>();
+
+                lineNumbers.AddRange(cfg.Airplanes.Select(a => a.Vh));
+
+                lineNumbers.AddRange(cfg.Airplanes.Select(a => a.Vz));
+
+                lineNumbers = lineNumbers
+
+                    .Select(x => x?.Trim())
+
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+
+                    .ToList();
+
+                // If you have a textbox called textLineNumbers and user typed something,
+
+                // we will USE THAT INSTEAD (so you can override quickly without editing config)
+
+                if (textLineNumbers != null && !string.IsNullOrWhiteSpace(textLineNumbers.Text))
+
+                {
+
+                    var typed = ParseLineNumbers(textLineNumbers.Text);
+
+                    if (typed.Count > 0)
+
+                        lineNumbers = typed;
+
+                }
+
+                if (lineNumbers.Count == 0)
+
+                {
+
+                    MessageBox.Show("No line numbers found. Add VH/VZ pairs in Setup first.", "PomReport",
+
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+                    return;
+
+                }
+
+                // 5) Get SQL connection string from config (reflection so it won’t break if property name differs)
+
+                var connString = TryGetStringProperty(cfg, "SqlConnectionString")
+
+                              ?? TryGetStringProperty(cfg, "ConnectionString")
+
+                              ?? TryGetStringProperty(cfg, "SqlConnString");
+
+                if (string.IsNullOrWhiteSpace(connString))
+
+                {
+
+                    MessageBox.Show(
+
+                        "SQL Connection String is not saved in your config yet.\n\n" +
+
+                        "Open Setup and save the connection string, then run again.",
+
+                        "PomReport",
+
+                        MessageBoxButtons.OK,
+
+                        MessageBoxIcon.Warning);
+
+                    return;
+
+                }
+
+                // 6) Decide output folder (default: same folder as config file)
+
+                var outputFolder = TryGetStringProperty(cfg, "OutputFolder")
+
+                                ?? TryGetStringProperty(cfg, "ExportFolder")
+
+                                ?? TryGetStringProperty(cfg, "DataFolder");
+
+                if (string.IsNullOrWhiteSpace(outputFolder))
+
+                {
+
+                    outputFolder = Path.GetDirectoryName(ConfigStore.ConfigPath) ?? Environment.CurrentDirectory;
+
+                }
+
+                Directory.CreateDirectory(outputFolder);
+
+                _log.AppendText(Environment.NewLine);
+
+                _log.AppendText($"Pulling SQL for {lineNumbers.Count} line numbers...{Environment.NewLine}");
+
+                _log.AppendText($"Output folder: {outputFolder}{Environment.NewLine}");
+
+                // 7) Run SQL pull -> CSV (ASYNC)
+
+                var csvPath = await SqlJobSource.PullToCsvAsync(
+
+                    connString,
+
+                    SqlQueries.MainQuery,
+
+                    lineNumbers,
+
+                    outputFolder,
+
+                    filePrefix: "PomReport_SQL_Pull");
+
+                _log.AppendText($"DONE ✅ Saved CSV:{Environment.NewLine}{csvPath}{Environment.NewLine}");
+
+                MessageBox.Show($"Saved CSV:\n{csvPath}", "PomReport", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
             }
 
             catch (Exception ex)
 
             {
 
-                MessageBox.Show(ex.Message, "PomReport", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(ex.ToString(), "PomReport Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
 
             }
+
+            finally
+
+            {
+
+                btnPull.Enabled = true;
+
+            }
+
+        }
+
+        private static List<string> ParseLineNumbers(string input)
+
+        {
+
+            // Accept comma, space, newline, tab separators
+
+            var parts = input
+
+                .Split(new[] { ',', '\r', '\n', '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+
+                .Select(x => x.Trim())
+
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+
+                .ToList();
+
+            return parts;
+
+        }
+
+        private static string? TryGetStringProperty(object obj, string propertyName)
+
+        {
+
+            var prop = obj.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+
+            if (prop == null) return null;
+
+            if (prop.PropertyType != typeof(string)) return null;
+
+            return prop.GetValue(obj) as string;
 
         }
 

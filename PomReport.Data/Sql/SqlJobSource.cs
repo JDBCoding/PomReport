@@ -1,46 +1,236 @@
 using System;
+
+using System.Collections.Generic;
+
+using System.Globalization;
+
+using System.IO;
+
+using System.Linq;
+
+using System.Text;
+
+using System.Threading;
+
+using System.Threading.Tasks;
+
 using Microsoft.Data.SqlClient;
+
 namespace PomReport.Data.Sql
+
 {
-   public static class SqlJobSource
-   {
-       // Keep this if you want a default/fallback connection
-       public static string GetConn()
-       {
-           return
-               "Server=pbebdsmessier.nos.boeing.com;" +
-               "Database=Newton_Release;" +
-               "User ID=SvcIedwhExcel;" +
-               "Password=0x9F4DE51F3477553AE46A752DD6B66FCEE;" +
-               "Encrypt=True;" +
-               "TrustServerCertificate=True;";
-       }
-       // ✅ Single-argument test method (matches what we want everywhere)
-       public static SqlConnectionTestResult TestConnection(string connString)
-       {
-           var result = new SqlConnectionTestResult();
-           try
-           {
-               using var conn = new SqlConnection(connString);
-               conn.Open();
-               using var cmd = conn.CreateCommand();
-               cmd.CommandText =
-                   "SELECT @@SERVERNAME AS ServerName, DB_NAME() AS DbName, SYSTEM_USER AS SystemUser, SUSER_SNAME() AS LoginName";
-               using var reader = cmd.ExecuteReader();
-               if (!reader.Read())
-                   throw new Exception("Connection succeeded but the test query returned no rows.");
-               result.Success = true;
-               result.Server = reader["ServerName"]?.ToString() ?? "";
-               result.Database = reader["DbName"]?.ToString() ?? "";
-               result.SystemUser = reader["SystemUser"]?.ToString() ?? "";
-               result.LoginName = reader["LoginName"]?.ToString() ?? "";
-           }
-           catch (Exception ex)
-           {
-               result.Success = false;
-               result.ErrorMessage = ex.Message;
-           }
-           return result;
-       }
-   }
+
+    public static class SqlJobSource
+
+    {
+
+        // Optional default (you can ignore this and pass a connection string into PullToCsvAsync)
+
+        public static string ConnectionString { get; set; } =
+
+            "Server=YOURSERVER;Database=Newton_Release;Integrated Security=True;TrustServerCertificate=True;";
+
+        public static async Task<bool> TestConnectionAsync(
+
+            string connectionString,
+
+            CancellationToken ct = default)
+
+        {
+
+            await using var conn = new SqlConnection(connectionString);
+
+            await conn.OpenAsync(ct);
+
+            return conn.State == System.Data.ConnectionState.Open;
+
+        }
+
+        public static async Task<string> PullToCsvAsync(
+
+            string connectionString,
+
+            string sqlTemplate,
+
+            IEnumerable<string> lineNumbers,
+
+            string outputFolder,
+
+            string filePrefix = "POM_DB_Pull",
+
+            int commandTimeoutSeconds = 300,
+
+            CancellationToken ct = default)
+
+        {
+
+            if (string.IsNullOrWhiteSpace(connectionString))
+
+                throw new ArgumentException("Connection string is empty.", nameof(connectionString));
+
+            if (string.IsNullOrWhiteSpace(sqlTemplate))
+
+                throw new ArgumentException("SQL template is empty.", nameof(sqlTemplate));
+
+            var lnList = lineNumbers?
+
+                .Select(x => x?.Trim())
+
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+
+                .ToList() ?? new List<string>();
+
+            if (lnList.Count == 0)
+
+                throw new ArgumentException("No line numbers provided.", nameof(lineNumbers));
+
+            // Build parameter names: @ln0,@ln1,...
+
+            var paramNames = lnList.Select((_, i) => $"@ln{i}").ToList();
+
+            var inParams = string.Join(", ", paramNames);
+
+            if (!sqlTemplate.Contains("{LINE_NUMBER_PARAMS}", StringComparison.Ordinal))
+
+            {
+
+                throw new InvalidOperationException(
+
+                    "SQL template must contain the token {LINE_NUMBER_PARAMS} where the IN (...) list belongs.");
+
+            }
+
+            var sql = sqlTemplate.Replace("{LINE_NUMBER_PARAMS}", inParams);
+
+            Directory.CreateDirectory(outputFolder);
+
+            var fileName = $"{filePrefix}_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+
+            var fullPath = Path.Combine(outputFolder, fileName);
+
+            await using var conn = new SqlConnection(connectionString);
+
+            await conn.OpenAsync(ct);
+
+            await using var cmd = new SqlCommand(sql, conn)
+
+            {
+
+                CommandTimeout = commandTimeoutSeconds
+
+            };
+
+            // Add parameters safely
+
+            for (int i = 0; i < lnList.Count; i++)
+
+            {
+
+                // Adjust size if needed; 50 is usually plenty for VH/VZ/LineNumber values
+
+                cmd.Parameters.Add(new SqlParameter(paramNames[i], System.Data.SqlDbType.VarChar, 50)
+
+                {
+
+                    Value = lnList[i]
+
+                });
+
+            }
+
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+
+            await using var fs = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.Read);
+
+            await using var sw = new StreamWriter(fs, new UTF8Encoding(false));
+
+            // Header row
+
+            for (int i = 0; i < reader.FieldCount; i++)
+
+            {
+
+                if (i > 0) await sw.WriteAsync(",");
+
+                await sw.WriteAsync(Escape(reader.GetName(i)));
+
+            }
+
+            await sw.WriteLineAsync();
+
+            // Data rows
+
+            while (await reader.ReadAsync(ct))
+
+            {
+
+                for (int i = 0; i < reader.FieldCount; i++)
+
+                {
+
+                    if (i > 0) await sw.WriteAsync(",");
+
+                    await sw.WriteAsync(Escape(ToInvariant(reader.GetValue(i))));
+
+                }
+
+                await sw.WriteLineAsync();
+
+            }
+
+            await sw.FlushAsync();
+
+            return fullPath;
+
+        }
+
+        private static string ToInvariant(object? value)
+
+        {
+
+            if (value == null || value == DBNull.Value)
+
+                return "";
+
+            return value switch
+
+            {
+
+                decimal d => d.ToString(CultureInfo.InvariantCulture),
+
+                double d => d.ToString(CultureInfo.InvariantCulture),
+
+                float f => f.ToString(CultureInfo.InvariantCulture),
+
+                DateTime dt => dt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
+
+                _ => value.ToString() ?? ""
+
+            };
+
+        }
+
+        private static string Escape(string s)
+
+        {
+
+            if (s.Contains('"') || s.Contains(',') || s.Contains('\n') || s.Contains('\r'))
+
+            {
+
+                s = s.Replace("\"", "\"\"");
+
+                return $"\"{s}\"";
+
+            }
+
+            return s;
+
+        }
+
+    }
+
 }
+ 

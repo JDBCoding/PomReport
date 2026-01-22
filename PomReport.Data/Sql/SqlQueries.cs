@@ -1,9 +1,3 @@
-using System;
-
-using System.Collections.Generic;
-
-using System.Linq;
-
 namespace PomReport.Data.Sql
 
 {
@@ -14,81 +8,279 @@ namespace PomReport.Data.Sql
 
         // IMPORTANT:
 
-        // Replace dbo.YourTable and column names with your real schema.
+        // The IN list must be: AND jl.LineNumber IN ({LINE_NUMBER_PARAMS})
 
-        // This template is syntactically valid and supports {IN_CLAUSE}.
+        // SqlJobSource will replace {LINE_NUMBER_PARAMS} with @ln0, @ln1, @ln2...
 
-        public const string MainQueryTemplate = @"
+        public const string MainQuery = @"
 
 WITH JobList AS
 
 (
 
-    SELECT *
+    SELECT
 
-    FROM dbo.YourTable
+        j.Program,
+
+        j.SourceSystem,
+
+        mm.MbuName,
+
+        j.JobID,
+
+        j.LineNumber,
+
+        j.JobNumber AS WorkOrder,
+
+        COALESCE(j.ParentJobNumber, '-') AS ParentWorkOrder,
+
+        j.PartNumber AS JobKit,
+
+        j.Description AS JobKitDescription,
+
+        COALESCE(j.PlannedHours, 0) AS PlannedHours,
+
+        COALESCE(j.ActualHours, 0) AS ActualHours,
+
+        j.OrderStatus AS Status
+
+    FROM Newton_Release.pbe.vjob j WITH (NOLOCK)
+
+    INNER JOIN Newton_Release.pbe.vMbuMapping mm WITH (NOLOCK) ON 1=1
+
+        AND mm.MesLevel1 = j.MesLevel1
+
+        AND mm.MesLevel2 = j.MesLevel2
+
+        AND mm.MesLevel3 = j.MesLevel3
+
+),
+
+Tecnicians AS
+
+(
+
+    SELECT
+
+        aj.Program,
+
+        aj.LineNumber,
+
+        aj.JobNumber,
+
+        STRING_AGG(CONCAT(au.FirstName,' ',au.LastName),', ') AS Technicians
+
+    FROM Newton_Release.pbe.vAssignedJob aj WITH (NOLOCK)
+
+    INNER JOIN Newton_Release.pbe.vAppUser au WITH (NOLOCK) ON 1=1
+
+        AND au.AppUserID = aj.AppUserID
+
+    WHERE 1=1
+
+        AND AssignedJobEndDateTimeUtc IS NULL
+
+    GROUP BY
+
+        aj.Program,
+
+        aj.LineNumber,
+
+        aj.JobNumber
+
+),
+
+DailyPlan AS
+
+(
+
+    SELECT
+
+        jt.JobID,
+
+        SUM(CASE WHEN jt.TagName = 'WIP' THEN 1 ELSE 0 END) AS WipFlag,
+
+        SUM(CASE WHEN jt.TagName = 'DCMT' THEN 1 ELSE 0 END) AS DcmtFlag,
+
+        CAST(MAX(jtt.Ecd) AS DATE) AS Ecd
+
+    FROM Newton_Release.pbe.vJobTag jt WITH (NOLOCK)
+
+    INNER JOIN Newton_Release.pbe.JobTag jtt WITH (NOLOCK) ON 1=1
+
+        AND jtt.JobTagID = jt.JobTagID
+
+    WHERE 1=1
+
+        AND jt.TagType = 'DailyPlan'
+
+        AND jt.JobTagEndDateUtc IS NULL
+
+    GROUP BY
+
+        jt.JobID
+
+),
+
+HeldFor AS
+
+(
+
+    SELECT
+
+        jt.JobID,
+
+        STRING_AGG(jt.TagName,', ') WITHIN GROUP (ORDER BY jt.TagName) AS HeldFor
+
+    FROM Newton_Release.pbe.vJobTag jt WITH (NOLOCK)
+
+    INNER JOIN Newton_Release.pbe.JobTag jtt WITH (NOLOCK) ON 1=1
+
+        AND jtt.JobTagID = jt.JobTagID
+
+    WHERE 1=1
+
+        AND jt.TagType = 'ShopTag'
+
+        AND jt.JobTagEndDateUtc IS NULL
+
+    GROUP BY
+
+        jt.JobID
+
+),
+
+Comments AS
+
+(
+
+    SELECT
+
+        jc.JobID,
+
+        jc.Comment,
+
+        ROW_NUMBER() OVER (PARTITION BY jc.JobID ORDER BY JobCommentID DESC) AS CommentRank
+
+    FROM Newton_Release.pbe.JobComment jc WITH (NOLOCK)
+
+    INNER JOIN Newton_Release.pbe.vAppUser au WITH (NOLOCK) ON 1=1
+
+        AND au.AppUserID = jc.AppUserID
+
+    WHERE 1=1
+
+        AND jc.DeletedRowInd = 0
+
+),
+
+Notes AS
+
+(
+
+    SELECT
+
+        j.JobID,
+
+        jd.JobNotes AS Note,
+
+        ROW_NUMBER() OVER (PARTITION BY j.JobID ORDER BY jd.JobDataID DESC) AS NoteRank
+
+    FROM Newton_Release.pbe.JobData jd
+
+    INNER JOIN Newton_Release.pbe.Job j WITH (NOLOCK) ON 1=1
+
+        AND j.JobUniqueId = jd.JobUniqueID
+
+    WHERE 1=1
+
+        AND jd.DeletedRowInd = 0
 
 )
 
-SELECT *
+SELECT
+
+        jl.LineNumber,
+
+        jl.WorkOrder,
+
+        jl.JobKitDescription,
+
+        COALESCE(n.Note, '-') AS JobNotes,
+
+        jl.PlannedHours,
+
+        COALESCE(c.Comment, '-') AS JobComments,
+
+        COALESCE(two.Technicians, tpn.Technicians, '-') AS Technicians,
+
+        CASE
+
+            WHEN WipFlag IS NULL AND DcmtFlag IS NULL THEN '-'
+
+            WHEN WipFlag = 1 THEN 'WIP'
+
+            WHEN DcmtFlag = 1 THEN 'DCMT'
+
+            ELSE '-'
+
+        END AS DailyPlan,
+
+        jl.ActualHours,
+
+        jl.JobKit,
+
+        jl.ParentWorkOrder,
+
+        COALESCE(hf.HeldFor, '-') AS HeldFor
 
 FROM JobList jl
 
-WHERE 1 = 1
+LEFT JOIN Tecnicians two ON 1=1
 
-  AND jl.Program = '842'
+    AND two.JobNumber = jl.WorkOrder
 
-  AND jl.SourceSystem = 'MES'
+LEFT JOIN Tecnicians tpn ON 1=1
 
-  AND jl.MbuName = 'EDC'
+    AND tpn.Program = jl.Program
 
-  AND jl.Status = 'Open'
+    AND tpn.LineNumber = jl.LineNumber
 
-  AND jl.LineNumber IN {IN_CLAUSE};
+    AND tpn.JobNumber = jl.JobKit
+
+LEFT JOIN DailyPlan dp ON 1=1
+
+    AND dp.JobID = jl.JobID
+
+LEFT JOIN HeldFor hf ON 1=1
+
+    AND hf.JobID = jl.JobID
+
+LEFT JOIN Comments c ON 1=1
+
+    AND c.JobID = jl.JobID
+
+    AND c.CommentRank = 1
+
+LEFT JOIN Notes n ON 1=1
+
+    AND n.JobID = jl.JobID
+
+    AND n.NoteRank = 1
+
+WHERE 1=1
+
+    AND jl.Program = '842'
+
+    AND jl.SourceSystem = 'MES'
+
+    AND jl.MbuName = 'EDC'
+
+    AND jl.Status = 'Open'
+
+    AND jl.LineNumber IN ({LINE_NUMBER_PARAMS})
 
 ";
-
-        public static string BuildLineNumberInClause(IEnumerable<string> lineNumbers)
-
-        {
-
-            if (lineNumbers == null)
-
-                return "('NONE')";
-
-            var cleaned = lineNumbers
-
-                .Select(x => (x ?? string.Empty).Trim())
-
-                .Where(x => !string.IsNullOrWhiteSpace(x))
-
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-
-                .ToList();
-
-            if (cleaned.Count == 0)
-
-                return "('NONE')";
-
-            // escape single quotes for SQL string literals
-
-            var quoted = cleaned.Select(x => $"'{x.Replace("'", "''")}'");
-
-            return "(" + string.Join(", ", quoted) + ")";
-
-        }
-
-        public static string BuildMainQuery(string lineNumberInClause)
-
-        {
-
-            if (string.IsNullOrWhiteSpace(lineNumberInClause))
-
-                lineNumberInClause = "('NONE')";
-
-            return MainQueryTemplate.Replace("{IN_CLAUSE}", lineNumberInClause);
-
-        }
 
     }
 
