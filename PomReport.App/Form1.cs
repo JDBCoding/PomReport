@@ -2,19 +2,15 @@ using System;
 
 using System.Collections.Generic;
 
-using System.IO;
+using System.ComponentModel;
 
 using System.Linq;
-
-using System.Reflection;
-
-using System.Threading.Tasks;
 
 using System.Windows.Forms;
 
 using PomReport.Config;
 
-using PomReport.Data.Sql;
+using PomReport.Config.Models;
 
 namespace PomReport.App
 
@@ -24,33 +20,57 @@ namespace PomReport.App
 
     {
 
+        // ---- UI we create in code (no designer edits required) ----
+
+        private DataGridView _grid = null!;
+
+        private TextBox _txtVh = null!;
+
+        private TextBox _txtVz = null!;
+
+        private TextBox _txtLocation = null!;
+
+        private Button _btnAdd = null!;
+
+        private Button _btnRemove = null!;
+
+        // ---- data binding ----
+
+        private readonly BindingList<AirplanePair> _pairs = new();
+
         public Form1()
 
         {
 
             InitializeComponent();
 
+            BuildAirplanePairsUi();
+
+            LoadConfigIntoGridAndPreview();
+
         }
 
-        // IMPORTANT: Designer is wired to this name.
+        // This method MUST exist because Form1.Designer.cs is wired to it.
+
+        // We keep it async-safe (no blocking UI later when DB pull is wired).
 
         private async void btnPull_Click(object sender, EventArgs e)
 
         {
 
-            // Disable button so user can’t double-click and start 2 pulls
-
-            btnPull.Enabled = false;
-
             try
 
             {
 
-                // 1) Ensure config exists
+                // 1) Ensure config exists (first run -> setup)
 
                 if (!ConfigStore.Exists())
 
                 {
+
+                    // If you still want SetupForm flow, keep it.
+
+                    // Otherwise, you can auto-create default.
 
                     using var setup = new SetupForm();
 
@@ -60,179 +80,15 @@ namespace PomReport.App
 
                 }
 
-                // 2) Load config
+                // 2) Reload latest config (in case user just added/removed)
 
-                var cfg = ConfigStore.Load();
+                LoadConfigIntoGridAndPreview();
 
-                // 3) Log current config contents (same as before)
+                // 3) For now: just confirm what will be passed to SQL
 
-                _log.Clear();
+                // (DB work comes next step)
 
-                _log.AppendText($"Shop: {cfg.ShopName}{Environment.NewLine}");
-
-                _log.AppendText($"Config: {ConfigStore.ConfigPath}{Environment.NewLine}{Environment.NewLine}");
-
-                _log.AppendText("VH/VZ pairs:" + Environment.NewLine);
-
-                foreach (var a in cfg.Airplanes)
-
-                {
-
-                    var loc = string.IsNullOrWhiteSpace(a.Location) ? "" : $" | {a.Location}";
-
-                    _log.AppendText($"  {a.Vh} = {a.Vz}{loc}{Environment.NewLine}");
-
-                }
-
-                _log.AppendText(Environment.NewLine + "Job Categories:" + Environment.NewLine);
-
-                foreach (var j in cfg.JobCategories)
-
-                {
-
-                    _log.AppendText($"  {j.Ip} = {j.Category}{Environment.NewLine}");
-
-                }
-
-                // Optional: show preview area if it exists
-
-                if (textQueryPreview != null)
-
-                {
-
-                    var vhList = cfg.Airplanes.Select(x => x.Vh).ToList();
-
-                    var vzList = cfg.Airplanes.Select(x => x.Vz).ToList();
-
-                    textQueryPreview.Text =
-
-                        "-- Inputs loaded from config\r\n" +
-
-                        $"-- VH count: {vhList.Count}, VZ count: {vzList.Count}\r\n" +
-
-                        $"-- Example VH: {string.Join(", ", vhList.Take(5))}\r\n" +
-
-                        $"-- Example VZ: {string.Join(", ", vzList.Take(5))}\r\n";
-
-                }
-
-                // 4) Build the line-number list
-
-                // Default behavior: use all VH + all VZ as line numbers (distinct)
-
-                var lineNumbers = new List<string>();
-
-                lineNumbers.AddRange(cfg.Airplanes.Select(a => a.Vh));
-
-                lineNumbers.AddRange(cfg.Airplanes.Select(a => a.Vz));
-
-                lineNumbers = lineNumbers
-
-                    .Select(x => x?.Trim())
-
-                    .Where(x => !string.IsNullOrWhiteSpace(x))
-
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-
-                    .ToList();
-
-                // If you have a textbox called textLineNumbers and user typed something,
-
-                // we will USE THAT INSTEAD (so you can override quickly without editing config)
-
-                if (textLineNumbers != null && !string.IsNullOrWhiteSpace(textLineNumbers.Text))
-
-                {
-
-                    var typed = ParseLineNumbers(textLineNumbers.Text);
-
-                    if (typed.Count > 0)
-
-                        lineNumbers = typed;
-
-                }
-
-                if (lineNumbers.Count == 0)
-
-                {
-
-                    MessageBox.Show("No line numbers found. Add VH/VZ pairs in Setup first.", "PomReport",
-
-                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
-
-                    return;
-
-                }
-
-                // 5) Get SQL connection string from config (reflection so it won’t break if property name differs)
-
-                var connString = TryGetStringProperty(cfg, "SqlConnectionString")
-
-                              ?? TryGetStringProperty(cfg, "ConnectionString")
-
-                              ?? TryGetStringProperty(cfg, "SqlConnString");
-
-                if (string.IsNullOrWhiteSpace(connString))
-
-                {
-
-                    MessageBox.Show(
-
-                        "SQL Connection String is not saved in your config yet.\n\n" +
-
-                        "Open Setup and save the connection string, then run again.",
-
-                        "PomReport",
-
-                        MessageBoxButtons.OK,
-
-                        MessageBoxIcon.Warning);
-
-                    return;
-
-                }
-
-                // 6) Decide output folder (default: same folder as config file)
-
-                var outputFolder = TryGetStringProperty(cfg, "OutputFolder")
-
-                                ?? TryGetStringProperty(cfg, "ExportFolder")
-
-                                ?? TryGetStringProperty(cfg, "DataFolder");
-
-                if (string.IsNullOrWhiteSpace(outputFolder))
-
-                {
-
-                    outputFolder = Path.GetDirectoryName(ConfigStore.ConfigPath) ?? Environment.CurrentDirectory;
-
-                }
-
-                Directory.CreateDirectory(outputFolder);
-
-                _log.AppendText(Environment.NewLine);
-
-                _log.AppendText($"Pulling SQL for {lineNumbers.Count} line numbers...{Environment.NewLine}");
-
-                _log.AppendText($"Output folder: {outputFolder}{Environment.NewLine}");
-
-                // 7) Run SQL pull -> CSV (ASYNC)
-
-                var csvPath = await SqlJobSource.PullToCsvAsync(
-
-                    connString,
-
-                    SqlQueries.MainQuery,
-
-                    lineNumbers,
-
-                    outputFolder,
-
-                    filePrefix: "PomReport_SQL_Pull");
-
-                _log.AppendText($"DONE ✅ Saved CSV:{Environment.NewLine}{csvPath}{Environment.NewLine}");
-
-                MessageBox.Show($"Saved CSV:\n{csvPath}", "PomReport", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                await System.Threading.Tasks.Task.CompletedTask;
 
             }
 
@@ -240,57 +96,400 @@ namespace PomReport.App
 
             {
 
-                MessageBox.Show(ex.ToString(), "PomReport Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(ex.Message, "PomReport", MessageBoxButtons.OK, MessageBoxIcon.Error);
 
             }
 
-            finally
+        }
+
+        // ----------------------------
+
+        // UI + persistence (table + add/remove only)
+
+        // ----------------------------
+
+        private void BuildAirplanePairsUi()
+
+        {
+
+            // We’ll add a small “Pairs” section at the TOP of the form.
+
+            // It won’t break your existing controls; it just adds above them.
+
+            var root = new TableLayoutPanel
 
             {
 
-                btnPull.Enabled = true;
+                Dock = DockStyle.Top,
+
+                AutoSize = true,
+
+                ColumnCount = 1,
+
+                RowCount = 2,
+
+                Padding = new Padding(8),
+
+            };
+
+            var addRow = new FlowLayoutPanel
+
+            {
+
+                Dock = DockStyle.Top,
+
+                AutoSize = true,
+
+                WrapContents = false
+
+            };
+
+            addRow.Controls.Add(new Label { Text = "VH:", AutoSize = true, Padding = new Padding(0, 6, 0, 0) });
+
+            _txtVh = new TextBox { Width = 90, PlaceholderText = "VH123" };
+
+            addRow.Controls.Add(_txtVh);
+
+            addRow.Controls.Add(new Label { Text = "VZ:", AutoSize = true, Padding = new Padding(8, 6, 0, 0) });
+
+            _txtVz = new TextBox { Width = 90, PlaceholderText = "VZ901" };
+
+            addRow.Controls.Add(_txtVz);
+
+            addRow.Controls.Add(new Label { Text = "Location:", AutoSize = true, Padding = new Padding(8, 6, 0, 0) });
+
+            _txtLocation = new TextBox { Width = 140, PlaceholderText = "Stall 212" };
+
+            addRow.Controls.Add(_txtLocation);
+
+            _btnAdd = new Button { Text = "Add", Width = 80, Height = 28, Margin = new Padding(12, 2, 0, 0) };
+
+            _btnAdd.Click += (_, __) => AddPair();
+
+            addRow.Controls.Add(_btnAdd);
+
+            _btnRemove = new Button { Text = "Remove Selected", Width = 140, Height = 28, Margin = new Padding(8, 2, 0, 0) };
+
+            _btnRemove.Click += (_, __) => RemoveSelectedPair();
+
+            addRow.Controls.Add(_btnRemove);
+
+            _grid = new DataGridView
+
+            {
+
+                Dock = DockStyle.Top,
+
+                Height = 180,
+
+                AutoGenerateColumns = false,
+
+                AllowUserToAddRows = false,
+
+                AllowUserToDeleteRows = false,
+
+                AllowUserToResizeRows = false,
+
+                ReadOnly = true, // add/remove ONLY
+
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+
+                MultiSelect = false
+
+            };
+
+            _grid.Columns.Add(new DataGridViewTextBoxColumn
+
+            {
+
+                DataPropertyName = nameof(AirplanePair.Vh),
+
+                HeaderText = "VH",
+
+                Width = 90
+
+            });
+
+            _grid.Columns.Add(new DataGridViewTextBoxColumn
+
+            {
+
+                DataPropertyName = nameof(AirplanePair.Vz),
+
+                HeaderText = "VZ",
+
+                Width = 90
+
+            });
+
+            _grid.Columns.Add(new DataGridViewTextBoxColumn
+
+            {
+
+                DataPropertyName = nameof(AirplanePair.Location),
+
+                HeaderText = "Location",
+
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill
+
+            });
+
+            _grid.DataSource = _pairs;
+
+            root.Controls.Add(addRow);
+
+            root.Controls.Add(_grid);
+
+            // Put it at the top of your form.
+
+            Controls.Add(root);
+
+            root.BringToFront();
+
+        }
+
+        private void LoadConfigIntoGridAndPreview()
+
+        {
+
+            // Ensure config exists if you want “portable” default behavior:
+
+            // If SetupForm already created it, this is safe too.
+
+            if (!ConfigStore.Exists())
+
+            {
+
+                // Don’t auto-create silently if you prefer the setup dialog.
+
+                // But this makes dev/testing painless.
+
+                ConfigStore.CreateDefaultIfMissing();
+
+            }
+
+            var cfg = ConfigStore.Load();
+
+            // Load grid
+
+            _pairs.RaiseListChangedEvents = false;
+
+            _pairs.Clear();
+
+            if (cfg.Airplanes != null)
+
+            {
+
+                foreach (var p in cfg.Airplanes)
+
+                    _pairs.Add(p);
+
+            }
+
+            _pairs.RaiseListChangedEvents = true;
+
+            _pairs.ResetBindings();
+
+            // Build the IN-list values (THIS is the key fix: pass BOTH VH and VZ to jl.LineNumber)
+
+            var lineNumbers = BuildLineNumbersForSql(cfg.Airplanes);
+
+            // Update your existing log + preview areas (you said _log works)
+
+            if (_log != null)
+
+            {
+
+                _log.Clear();
+
+                _log.AppendText($"Shop: {cfg.ShopName}{Environment.NewLine}");
+
+                _log.AppendText($"Config: {ConfigStore.ConfigPath}{Environment.NewLine}{Environment.NewLine}");
+
+                _log.AppendText("LineNumbers passed to SQL (jl.LineNumber IN (...)):" + Environment.NewLine);
+
+                foreach (var ln in lineNumbers)
+
+                    _log.AppendText(ln + Environment.NewLine);
+
+                _log.AppendText(Environment.NewLine + $"Total LineNumbers: {lineNumbers.Count}" + Environment.NewLine);
+
+            }
+
+            if (textQueryPreview != null)
+
+            {
+
+                var inList = lineNumbers.Count == 0
+
+                    ? "()"
+
+                    : "(" + string.Join(", ", lineNumbers.Select(x => $"'{x}'")) + ")";
+
+                textQueryPreview.Text =
+
+                    "-- SQL Preview\r\n" +
+
+                    "AND jl.LineNumber IN " + inList + "\r\n";
 
             }
 
         }
 
-        private static List<string> ParseLineNumbers(string input)
+        private static List<string> BuildLineNumbersForSql(IList<AirplanePair>? pairs)
 
         {
 
-            // Accept comma, space, newline, tab separators
+            if (pairs == null || pairs.Count == 0)
 
-            var parts = input
+                return new List<string>();
 
-                .Split(new[] { ',', '\r', '\n', '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+            // Rule:
 
-                .Select(x => x.Trim())
+            // - Include VH values (if present)
 
-                .Where(x => !string.IsNullOrWhiteSpace(x))
+            // - Include VZ values (if present)
 
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+            // - Boom shop case: VZ may exist with blank VH -> still included
 
-                .ToList();
+            // - De-dupe + stable ordering
 
-            return parts;
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var p in pairs)
+
+            {
+
+                var vh = (p.Vh ?? "").Trim();
+
+                var vz = (p.Vz ?? "").Trim();
+
+                if (!string.IsNullOrWhiteSpace(vh)) set.Add(vh);
+
+                if (!string.IsNullOrWhiteSpace(vz)) set.Add(vz);
+
+            }
+
+            return set.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
 
         }
 
-        private static string? TryGetStringProperty(object obj, string propertyName)
+        private void AddPair()
 
         {
 
-            var prop = obj.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+            var vh = (_txtVh.Text ?? "").Trim();
 
-            if (prop == null) return null;
+            var vz = (_txtVz.Text ?? "").Trim();
 
-            if (prop.PropertyType != typeof(string)) return null;
+            var loc = (_txtLocation.Text ?? "").Trim();
 
-            return prop.GetValue(obj) as string;
+            // Enforce “add/remove only”, but we still validate new entries
+
+            if (string.IsNullOrWhiteSpace(vh) && string.IsNullOrWhiteSpace(vz))
+
+            {
+
+                MessageBox.Show("Enter at least VH or VZ.\n\nBoom shop rows can be VZ only.", "PomReport",
+
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                return;
+
+            }
+
+            // Optional: normalize casing
+
+            vh = vh.ToUpperInvariant();
+
+            vz = vz.ToUpperInvariant();
+
+            // Prevent duplicates (same exact VH+VZ)
+
+            var exists = _pairs.Any(p =>
+
+                string.Equals((p.Vh ?? "").Trim(), vh, StringComparison.OrdinalIgnoreCase) &&
+
+                string.Equals((p.Vz ?? "").Trim(), vz, StringComparison.OrdinalIgnoreCase));
+
+            if (exists)
+
+            {
+
+                MessageBox.Show("That VH/VZ pair already exists.", "PomReport",
+
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                return;
+
+            }
+
+            var cfg = ConfigStore.Load();
+
+            cfg.Airplanes ??= new List<AirplanePair>();
+
+            cfg.Airplanes.Add(new AirplanePair
+
+            {
+
+                Vh = vh,
+
+                Vz = vz,
+
+                Location = loc
+
+            });
+
+            ConfigStore.Save(cfg);
+
+            // refresh UI + IN-list preview
+
+            _txtVh.Clear();
+
+            _txtVz.Clear();
+
+            _txtLocation.Clear();
+
+            LoadConfigIntoGridAndPreview();
+
+        }
+
+        private void RemoveSelectedPair()
+
+        {
+
+            if (_grid.CurrentRow == null)
+
+                return;
+
+            if (_grid.CurrentRow.DataBoundItem is not AirplanePair selected)
+
+                return;
+
+            var cfg = ConfigStore.Load();
+
+            if (cfg.Airplanes == null || cfg.Airplanes.Count == 0)
+
+                return;
+
+            // true delete (per your requirement)
+
+            var removed = cfg.Airplanes.RemoveAll(p =>
+
+                string.Equals((p.Vh ?? "").Trim(), (selected.Vh ?? "").Trim(), StringComparison.OrdinalIgnoreCase) &&
+
+                string.Equals((p.Vz ?? "").Trim(), (selected.Vz ?? "").Trim(), StringComparison.OrdinalIgnoreCase) &&
+
+                string.Equals((p.Location ?? "").Trim(), (selected.Location ?? "").Trim(), StringComparison.OrdinalIgnoreCase));
+
+            if (removed > 0)
+
+                ConfigStore.Save(cfg);
+
+            LoadConfigIntoGridAndPreview();
 
         }
 
     }
 
 }
- 
