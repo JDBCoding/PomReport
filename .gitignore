@@ -1,10 +1,9 @@
+# Secrets / local config (do NOT commit)
+**/config.json
+**/config.*.json
+**/*secrets*.json
+**/appsettings*.json
 # Build output
-bin/
-obj/
-# VS
+**/bin/
+**/obj/
 .vs/
-*.user
-*.suo
-# Rider / VS Code
-.idea/
-.vscode/

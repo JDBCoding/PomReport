@@ -2,15 +2,21 @@ using System;
 
 using System.Collections.Generic;
 
-using System.ComponentModel;
-
 using System.IO;
 
 using System.Linq;
 
-using System.Text.Json;
+using System.Threading;
+
+using System.Threading.Tasks;
 
 using System.Windows.Forms;
+
+using PomReport.Config;
+
+using PomReport.Config.Models;
+
+using PomReport.Data.Sql;
 
 namespace PomReport.App
 
@@ -20,39 +26,7 @@ namespace PomReport.App
 
     {
 
-        // ----- UI we build at runtime (table + add/remove only) -----
-
-        private DataGridView _grid = null!;
-
-        private TextBox _txtVH = null!;
-
-        private TextBox _txtVZ = null!;
-
-        private TextBox _txtLocation = null!;
-
-        private Button _btnAdd = null!;
-
-        private Button _btnRemove = null!;
-
-        // ----- Data backing the grid -----
-
-        private readonly BindingList<AirplaneEntry> _entries = new();
-
-        // ----- Config file: next to EXE -----
-
-        private static string ConfigPath => Path.Combine(AppContext.BaseDirectory, "config.json");
-
-        // ----- JSON options (matches your existing config style) -----
-
-        private static readonly JsonSerializerOptions JsonOpts = new JsonSerializerOptions
-
-        {
-
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-
-            WriteIndented = true
-
-        };
+        private readonly BindingSource _airplanesBinding = new BindingSource();
 
         public Form1()
 
@@ -60,27 +34,51 @@ namespace PomReport.App
 
             InitializeComponent();
 
-            // Make sure the Pull button actually fires (designer wiring can get messed up)
+            Load += Form1_Load;
 
-            btnPull.Click -= btnPull_Click;
+            // Wire events (designer does NOT wire these)
 
             btnPull.Click += btnPull_Click;
 
-            BuildAirplaneTableUi();
+            btnAdd.Click += btnAdd_Click;
 
-            LoadConfigIntoGrid();
+            btnRemoveSelected.Click += btnRemoveSelected_Click;
 
-            RefreshSqlPreviewOnly();
+            // Grid setup
+
+            dataGridAirplanes.AutoGenerateColumns = false;
+
+            dataGridAirplanes.MultiSelect = true;
+
+            dataGridAirplanes.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+
+            _airplanesBinding.DataSource = new List<AirplanePair>();
+
+            dataGridAirplanes.DataSource = _airplanesBinding;
 
         }
 
-        // ============================================================
+        private ShopConfig LoadConfig()
 
-        //  Pull button
+        {
 
-        // ============================================================
+            ConfigStore.CreateDefaultIfMissing();
 
-        private void btnPull_Click(object? sender, EventArgs e)
+            return ConfigStore.Load();
+
+        }
+
+        private void SaveConfig(ShopConfig cfg)
+
+        {
+
+            cfg.LastUpdatedUtc = DateTime.UtcNow;
+
+            ConfigStore.Save(cfg);
+
+        }
+
+        private void Form1_Load(object? sender, EventArgs e)
 
         {
 
@@ -88,15 +86,19 @@ namespace PomReport.App
 
             {
 
-                SaveGridToConfig();          // persist whatever is in the table
+                var cfg = LoadConfig();
 
-                LoadConfigIntoGrid();        // reload (keeps us honest)
+                Log($"Config loaded from: {ConfigStore.ConfigPath}");
 
-                RefreshSqlPreviewOnly();     // show IN() and list
+                Log($"Airplanes in config: {cfg.Airplanes.Count}");
 
-                // NEXT: This is where your DB pull + CSV save goes.
+                // bind airplanes
 
-                // Right now we’re just proving the correct VH/VZ list is being passed.
+                _airplanesBinding.DataSource = cfg.Airplanes;
+
+                _airplanesBinding.ResetBindings(false);
+
+                UpdateSqlPreview(cfg);
 
             }
 
@@ -104,450 +106,289 @@ namespace PomReport.App
 
             {
 
-                MessageBox.Show(ex.Message, "PomReport", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(ex.Message, "Config load failed");
 
             }
 
         }
 
-        // ============================================================
-
-        //  Build IN-list: jl.LineNumber IN ('VH110','VZ475',...)
-
-        // ============================================================
-
-        private List<string> BuildLineNumberFilter()
+        private void UpdateSqlPreview(ShopConfig cfg)
 
         {
 
-            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var values = cfg.Airplanes
 
-            foreach (var e in _entries)
+                .SelectMany(a => new[] { a.Vh, a.Vz })
 
-            {
+                .Where(s => !string.IsNullOrWhiteSpace(s))
 
-                var vh = (e.Vh ?? "").Trim().ToUpperInvariant();
+                .Select(s => $"'{s.Trim()}'");
 
-                var vz = (e.Vz ?? "").Trim().ToUpperInvariant();
-
-                if (!string.IsNullOrWhiteSpace(vh)) set.Add(vh);
-
-                if (!string.IsNullOrWhiteSpace(vz)) set.Add(vz);
-
-            }
-
-            return set.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
-
-        }
-
-        private void RefreshSqlPreviewOnly()
-
-        {
-
-            _log.Clear();
-
-            _log.AppendText($"Config: {ConfigPath}{Environment.NewLine}");
-
-            var lineNumbers = BuildLineNumberFilter();
-
-            // show line numbers list (like your Excel “Query” tab B2 helper)
-
-            textLineNumbers.Text = string.Join(Environment.NewLine, lineNumbers);
-
-            var inListSql = lineNumbers.Count == 0
-
-                ? "('NONE')" // safe default; prevents SQL syntax error
-
-                : "(" + string.Join(", ", lineNumbers.Select(x => $"'{x.Replace("'", "''")}'")) + ")";
+            var list = string.Join(", ", values);
 
             textQueryPreview.Text =
 
-                "-- SQL Preview (tail)\r\n" +
+                "-- SQL Preview\n" +
 
-                "AND jl.LineNumber IN " + inListSql + "\r\n";
-
-            _log.AppendText($"Total LineNumbers: {lineNumbers.Count}{Environment.NewLine}");
+                $"AND jl.LineNumber IN ({list})";
 
         }
 
-        // ============================================================
-
-        //  UI: table + add/remove only
-
-        // ============================================================
-
-        private void BuildAirplaneTableUi()
+        private void btnAdd_Click(object? sender, EventArgs e)
 
         {
 
-            // Put our custom UI at the top.
-
-            // Your existing controls (btnPull/textLineNumbers/textQueryPreview/_log) stay as-is below.
-
-            var panel = new TableLayoutPanel
+            try
 
             {
 
-                Dock = DockStyle.Top,
+                var cfg = LoadConfig();
 
-                AutoSize = true,
+                var vh = (txtVh.Text ?? "").Trim();
 
-                ColumnCount = 1,
+                var vz = (txtVz.Text ?? "").Trim();
 
-                RowCount = 2,
+                var loc = (txtLocation.Text ?? "").Trim();
 
-                Padding = new Padding(8),
+                // Rules:
 
-            };
+                // - You said: boom shop allows VZ without VH -> allow blank VH as long as VZ exists
 
-            var addRow = new FlowLayoutPanel
+                // - But never allow both blank
 
-            {
-
-                Dock = DockStyle.Top,
-
-                AutoSize = true,
-
-                WrapContents = false
-
-            };
-
-            addRow.Controls.Add(new Label { Text = "VH:", AutoSize = true, Padding = new Padding(0, 6, 0, 0) });
-
-            _txtVH = new TextBox { Width = 90 };
-
-            addRow.Controls.Add(_txtVH);
-
-            addRow.Controls.Add(new Label { Text = "VZ:", AutoSize = true, Padding = new Padding(8, 6, 0, 0) });
-
-            _txtVZ = new TextBox { Width = 90 };
-
-            addRow.Controls.Add(_txtVZ);
-
-            addRow.Controls.Add(new Label { Text = "Location:", AutoSize = true, Padding = new Padding(8, 6, 0, 0) });
-
-            _txtLocation = new TextBox { Width = 160 };
-
-            addRow.Controls.Add(_txtLocation);
-
-            _btnAdd = new Button { Text = "Add", Width = 90, Height = 28, Margin = new Padding(12, 2, 0, 0) };
-
-            _btnAdd.Click += (_, __) => AddRow();
-
-            addRow.Controls.Add(_btnAdd);
-
-            _btnRemove = new Button { Text = "Remove Selected", Width = 150, Height = 28, Margin = new Padding(8, 2, 0, 0) };
-
-            _btnRemove.Click += (_, __) => RemoveSelectedRow();
-
-            addRow.Controls.Add(_btnRemove);
-
-            _grid = new DataGridView
-
-            {
-
-                Dock = DockStyle.Top,
-
-                Height = 170,
-
-                AutoGenerateColumns = false,
-
-                AllowUserToAddRows = false,
-
-                AllowUserToDeleteRows = false,
-
-                AllowUserToResizeRows = false,
-
-                ReadOnly = true, // add/remove only
-
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-
-                MultiSelect = false
-
-            };
-
-            _grid.Columns.Add(new DataGridViewTextBoxColumn
-
-            {
-
-                DataPropertyName = nameof(AirplaneEntry.Vh),
-
-                HeaderText = "VH",
-
-                Width = 90
-
-            });
-
-            _grid.Columns.Add(new DataGridViewTextBoxColumn
-
-            {
-
-                DataPropertyName = nameof(AirplaneEntry.Vz),
-
-                HeaderText = "VZ",
-
-                Width = 90
-
-            });
-
-            _grid.Columns.Add(new DataGridViewTextBoxColumn
-
-            {
-
-                DataPropertyName = nameof(AirplaneEntry.Location),
-
-                HeaderText = "Location",
-
-                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill
-
-            });
-
-            _grid.DataSource = _entries;
-
-            panel.Controls.Add(addRow);
-
-            panel.Controls.Add(_grid);
-
-            Controls.Add(panel);
-
-            panel.BringToFront();
-
-        }
-
-        private void AddRow()
-
-        {
-
-            var vh = (_txtVH.Text ?? "").Trim().ToUpperInvariant();
-
-            var vz = (_txtVZ.Text ?? "").Trim().ToUpperInvariant();
-
-            var loc = (_txtLocation.Text ?? "").Trim();
-
-            // boom shop case: VZ-only is allowed
-
-            if (string.IsNullOrWhiteSpace(vh) && string.IsNullOrWhiteSpace(vz))
-
-            {
-
-                MessageBox.Show("Enter at least VH or VZ.\n\nBoom shop rows can be VZ only.",
-
-                    "PomReport", MessageBoxButtons.OK, MessageBoxIcon.Information);
-
-                return;
-
-            }
-
-            // prevent duplicate exact pair (VH+VZ)
-
-            bool exists = _entries.Any(x =>
-
-                string.Equals((x.Vh ?? "").Trim(), vh, StringComparison.OrdinalIgnoreCase) &&
-
-                string.Equals((x.Vz ?? "").Trim(), vz, StringComparison.OrdinalIgnoreCase));
-
-            if (exists)
-
-            {
-
-                MessageBox.Show("That VH/VZ pair already exists.", "PomReport",
-
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
-
-                return;
-
-            }
-
-            _entries.Add(new AirplaneEntry { Vh = vh, Vz = vz, Location = loc });
-
-            _txtVH.Clear();
-
-            _txtVZ.Clear();
-
-            _txtLocation.Clear();
-
-            SaveGridToConfig();
-
-            RefreshSqlPreviewOnly();
-
-        }
-
-        private void RemoveSelectedRow()
-
-        {
-
-            if (_grid.CurrentRow?.DataBoundItem is not AirplaneEntry selected)
-
-                return;
-
-            // true delete
-
-            _entries.Remove(selected);
-
-            SaveGridToConfig();
-
-            RefreshSqlPreviewOnly();
-
-        }
-
-        // ============================================================
-
-        //  Config read/write (portable: stored next to EXE)
-
-        // ============================================================
-
-        private void LoadConfigIntoGrid()
-
-        {
-
-            var cfg = LoadConfig();
-
-            _entries.RaiseListChangedEvents = false;
-
-            _entries.Clear();
-
-            foreach (var a in cfg.Airplanes)
-
-                _entries.Add(new AirplaneEntry { Vh = a.Vh, Vz = a.Vz, Location = a.Location });
-
-            _entries.RaiseListChangedEvents = true;
-
-            _entries.ResetBindings();
-
-        }
-
-        private void SaveGridToConfig()
-
-        {
-
-            var cfg = LoadConfig();
-
-            cfg.Airplanes = _entries
-
-                .Select(x => new AirplaneEntry
+                if (string.IsNullOrWhiteSpace(vh) && string.IsNullOrWhiteSpace(vz))
 
                 {
 
-                    Vh = (x.Vh ?? "").Trim().ToUpperInvariant(),
+                    MessageBox.Show("Enter at least VH or VZ.", "Add airplane");
 
-                    Vz = (x.Vz ?? "").Trim().ToUpperInvariant(),
+                    return;
 
-                    Location = (x.Location ?? "").Trim()
+                }
 
-                })
+                // Optional: avoid exact duplicates (same VH+VZ+Location)
 
-                .ToList();
+                bool duplicate = cfg.Airplanes.Any(a =>
 
-            SaveConfig(cfg);
+                    string.Equals((a.Vh ?? "").Trim(), vh, StringComparison.OrdinalIgnoreCase) &&
 
-        }
+                    string.Equals((a.Vz ?? "").Trim(), vz, StringComparison.OrdinalIgnoreCase) &&
 
-        private static RootConfig LoadConfig()
+                    string.Equals((a.Location ?? "").Trim(), loc, StringComparison.OrdinalIgnoreCase)
 
-        {
+                );
 
-            if (!File.Exists(ConfigPath))
-
-            {
-
-                var fresh = new RootConfig
+                if (duplicate)
 
                 {
 
-                    ShopName = "New Shop",
+                    MessageBox.Show("That row already exists.", "Add airplane");
 
-                    ExportFolderName = "exports",
+                    return;
 
-                    SnapshotFolderName = "snapshots",
+                }
 
-                    Airplanes = new List<AirplaneEntry>(),
+                cfg.Airplanes.Add(new AirplanePair
 
-                    JobCategories = new List<JobCategory>()
+                {
 
-                };
+                    Vh = vh,
 
-                SaveConfig(fresh);
+                    Vz = vz,
 
-                return fresh;
+                    Location = loc
+
+                });
+
+                SaveConfig(cfg);
+
+                // refresh binding
+
+                _airplanesBinding.DataSource = cfg.Airplanes;
+
+                _airplanesBinding.ResetBindings(false);
+
+                // clear inputs
+
+                txtVh.Text = "";
+
+                txtVz.Text = "";
+
+                txtLocation.Text = "";
+
+                UpdateSqlPreview(cfg);
 
             }
 
-            var json = File.ReadAllText(ConfigPath);
+            catch (Exception ex)
 
-            var cfg = JsonSerializer.Deserialize<RootConfig>(json, JsonOpts);
+            {
 
-            if (cfg == null) throw new InvalidOperationException("config.json is empty or invalid.");
+                Log(ex.ToString());
 
-            cfg.Airplanes ??= new List<AirplaneEntry>();
+                MessageBox.Show(ex.Message, "Add failed");
 
-            cfg.JobCategories ??= new List<JobCategory>();
-
-            cfg.ShopName ??= "New Shop";
-
-            cfg.ExportFolderName ??= "exports";
-
-            cfg.SnapshotFolderName ??= "snapshots";
-
-            return cfg;
+            }
 
         }
 
-        private static void SaveConfig(RootConfig cfg)
+        private void btnRemoveSelected_Click(object? sender, EventArgs e)
 
         {
 
-            var json = JsonSerializer.Serialize(cfg, JsonOpts);
+            try
 
-            File.WriteAllText(ConfigPath, json);
+            {
+
+                if (dataGridAirplanes.SelectedRows.Count == 0)
+
+                {
+
+                    MessageBox.Show("Select one or more rows to remove.", "Remove");
+
+                    return;
+
+                }
+
+                var cfg = LoadConfig();
+
+                // Gather selected items
+
+                var selected = new List<AirplanePair>();
+
+                foreach (DataGridViewRow row in dataGridAirplanes.SelectedRows)
+
+                {
+
+                    if (row.DataBoundItem is AirplanePair ap)
+
+                        selected.Add(ap);
+
+                }
+
+                if (selected.Count == 0) return;
+
+                // TRUE DELETE
+
+                foreach (var ap in selected)
+
+                    cfg.Airplanes.Remove(ap);
+
+                SaveConfig(cfg);
+
+                _airplanesBinding.DataSource = cfg.Airplanes;
+
+                _airplanesBinding.ResetBindings(false);
+
+                UpdateSqlPreview(cfg);
+
+            }
+
+            catch (Exception ex)
+
+            {
+
+                Log(ex.ToString());
+
+                MessageBox.Show(ex.Message, "Remove failed");
+
+            }
 
         }
 
-        // ============================================================
-
-        //  Local DTOs (so we don't depend on conflicting namespaces)
-
-        // ============================================================
-
-        private sealed class RootConfig
+        private async void btnPull_Click(object? sender, EventArgs e)
 
         {
 
-            public string? ShopName { get; set; }
+            try
 
-            public string? ExportFolderName { get; set; }
+            {
 
-            public string? SnapshotFolderName { get; set; }
+                var cfg = LoadConfig();
 
-            public List<AirplaneEntry> Airplanes { get; set; } = new();
+                // Build VH/VZ list for LineNumber IN (...)
 
-            public List<JobCategory> JobCategories { get; set; } = new();
+                var lineNumbers = cfg.Airplanes
 
-            public string? LastUpdatedUtc { get; set; }
+                    .SelectMany(a => new[] { a.Vh, a.Vz })
+
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+
+                    .Select(s => s.Trim())
+
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+
+                    .ToList();
+
+                if (lineNumbers.Count == 0)
+
+                {
+
+                    MessageBox.Show("No VH/VZ values found.", "Nothing to run");
+
+                    return;
+
+                }
+
+                var outputDir = Path.Combine(
+
+                    AppContext.BaseDirectory,
+
+                    cfg.ExportFolderName ?? "exports"
+
+                );
+
+                Directory.CreateDirectory(outputDir);
+
+                Log("Running query...");
+
+                Log($"Output directory: {outputDir}");
+
+                var cts = new CancellationTokenSource();
+
+                var outFile = await SqlJobSource.PullToCsvAsync(
+
+                    cfg.ConnectionString ?? "",
+
+                    SqlQueries.MainQuery,
+
+                    lineNumbers,
+
+                    outputDir,
+
+                    "PomReport",
+
+                    50000,
+
+                    cts.Token
+
+                );
+
+                Log($"CSV written: {outFile}");
+
+            }
+
+            catch (Exception ex)
+
+            {
+
+                Log(ex.ToString());
+
+                MessageBox.Show(ex.Message, "Run failed");
+
+            }
 
         }
 
-        private sealed class AirplaneEntry
+        private void Log(string message)
 
         {
 
-            public string? Vh { get; set; }
-
-            public string? Vz { get; set; }
-
-            public string? Location { get; set; }
-
-        }
-
-        private sealed class JobCategory
-
-        {
-
-            public string? Ip { get; set; }
-
-            public string? Category { get; set; }
+            _log.AppendText(message + Environment.NewLine);
 
         }
 
     }
 
 }
+ 

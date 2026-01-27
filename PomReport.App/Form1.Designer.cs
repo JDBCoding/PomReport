@@ -4,21 +4,7 @@ partial class Form1
 
 {
 
-    /// <summary>
-
-    ///  Required designer variable.
-
-    /// </summary>
-
     private System.ComponentModel.IContainer components = null;
-
-    /// <summary>
-
-    ///  Clean up any resources being used.
-
-    /// </summary>
-
-    /// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
 
     protected override void Dispose(bool disposing)
 
@@ -38,108 +24,65 @@ partial class Form1
 
     #region Windows Form Designer generated code
 
-    /// <summary>
-
-    ///  Required method for Designer support - do not modify
-
-    ///  the contents of this method with the code editor.
-
-    /// </summary>
-
     private void InitializeComponent()
 
     {
 
         btnPull = new Button();
 
-        _log = new TextBox();
-
-        textLineNumbers = new TextBox();
-
         textQueryPreview = new TextBox();
+
+        lblVh = new Label();
+
+        lblVz = new Label();
+
+        lblLocation = new Label();
+
+        txtVh = new TextBox();
+
+        txtVz = new TextBox();
+
+        txtLocation = new TextBox();
+
+        btnAdd = new Button();
+
+        btnRemoveSelected = new Button();
+
+        dataGridAirplanes = new DataGridView();
+
+        colVh = new DataGridViewTextBoxColumn();
+
+        colVz = new DataGridViewTextBoxColumn();
+
+        colLocation = new DataGridViewTextBoxColumn();
+
+        _log = new TextBox();
 
         SuspendLayout();
 
-        // 
-
         // btnPull
 
-        // 
-        btnPull = new Button();
+        btnPull.Dock = DockStyle.Top;
 
-        btnPull.Location = new Point(420, 40);
+        btnPull.Height = 32;
 
         btnPull.Name = "btnPull";
 
-        btnPull.Size = new Size(180, 28);
-
-        btnPull.TabIndex = 10;
+        btnPull.TabIndex = 0;
 
         btnPull.Text = "Pull from DB -> Save CSV";
 
         btnPull.UseVisualStyleBackColor = true;
 
-        btnPull.Click += btnPull_Click;
-
-        Controls.Add(btnPull);
-
-        // 
-
-        // _log
-
-        // 
-
-        _log.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-
-        _log.Location = new Point(3, 371);
-
-        _log.Multiline = true;
-
-        _log.Name = "_log";
-
-        _log.ScrollBars = ScrollBars.Vertical;
-
-        _log.Size = new Size(776, 93);
-
-        _log.TabIndex = 1;
-
-        _log.WordWrap = false;
-
-        // 
-
-        // textLineNumbers
-
-        // 
-
-        textLineNumbers.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-
-        textLineNumbers.Location = new Point(12, 65);
-
-        textLineNumbers.Multiline = true;
-
-        textLineNumbers.Name = "textLineNumbers";
-
-        textLineNumbers.ScrollBars = ScrollBars.Vertical;
-
-        textLineNumbers.Size = new Size(313, 121);
-
-        textLineNumbers.TabIndex = 2;
-
-        textLineNumbers.WordWrap = false;
-
-        // 
-
         // textQueryPreview
 
-        // 
+        textQueryPreview.Dock = DockStyle.Top;
 
-        textQueryPreview.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-
-        textQueryPreview.Font = new Font("Consolas", 9F, FontStyle.Regular, GraphicsUnit.Point, 0);
-
-        textQueryPreview.Location = new Point(12, 241);
+        textQueryPreview.Font = new Font("Consolas", 9F, FontStyle.Regular, GraphicsUnit.Point);
 
         textQueryPreview.Multiline = true;
+
+        textQueryPreview.Height = 80;
 
         textQueryPreview.Name = "textQueryPreview";
 
@@ -147,35 +90,183 @@ partial class Form1
 
         textQueryPreview.ScrollBars = ScrollBars.Both;
 
-        textQueryPreview.Size = new Size(313, 84);
+        textQueryPreview.TabIndex = 1;
 
-        textQueryPreview.TabIndex = 3;
+        textQueryPreview.WordWrap = false;
 
-        // 
+        // Labels
+
+        lblVh.AutoSize = true;
+
+        lblVh.Text = "VH:";
+
+        lblVh.Location = new Point(12, 128);
+
+        lblVz.AutoSize = true;
+
+        lblVz.Text = "VZ:";
+
+        lblVz.Location = new Point(180, 128);
+
+        lblLocation.AutoSize = true;
+
+        lblLocation.Text = "Location:";
+
+        lblLocation.Location = new Point(348, 128);
+
+        // Textboxes
+
+        txtVh.Location = new Point(48, 124);
+
+        txtVh.Size = new Size(120, 23);
+
+        txtVh.Name = "txtVh";
+
+        txtVh.TabIndex = 2;
+
+        txtVz.Location = new Point(216, 124);
+
+        txtVz.Size = new Size(120, 23);
+
+        txtVz.Name = "txtVz";
+
+        txtVz.TabIndex = 3;
+
+        txtLocation.Location = new Point(412, 124);
+
+        txtLocation.Size = new Size(240, 23);
+
+        txtLocation.Name = "txtLocation";
+
+        txtLocation.TabIndex = 4;
+
+        // btnAdd
+
+        btnAdd.Location = new Point(670, 123);
+
+        btnAdd.Size = new Size(90, 25);
+
+        btnAdd.Name = "btnAdd";
+
+        btnAdd.TabIndex = 5;
+
+        btnAdd.Text = "Add";
+
+        btnAdd.UseVisualStyleBackColor = true;
+
+        // btnRemoveSelected
+
+        btnRemoveSelected.Location = new Point(770, 123);
+
+        btnRemoveSelected.Size = new Size(140, 25);
+
+        btnRemoveSelected.Name = "btnRemoveSelected";
+
+        btnRemoveSelected.TabIndex = 6;
+
+        btnRemoveSelected.Text = "Remove Selected";
+
+        btnRemoveSelected.UseVisualStyleBackColor = true;
+
+        // dataGridAirplanes
+
+        dataGridAirplanes.Location = new Point(12, 155);
+
+        dataGridAirplanes.Size = new Size(898, 220);
+
+        dataGridAirplanes.Name = "dataGridAirplanes";
+
+        dataGridAirplanes.TabIndex = 7;
+
+        dataGridAirplanes.AllowUserToAddRows = false;
+
+        dataGridAirplanes.AllowUserToDeleteRows = false;
+
+        dataGridAirplanes.ReadOnly = true;
+
+        dataGridAirplanes.RowHeadersVisible = false;
+
+        dataGridAirplanes.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+        dataGridAirplanes.Columns.AddRange(new DataGridViewColumn[] { colVh, colVz, colLocation });
+
+        // colVh
+
+        colVh.HeaderText = "VH";
+
+        colVh.DataPropertyName = "Vh";
+
+        colVh.Width = 120;
+
+        // colVz
+
+        colVz.HeaderText = "VZ";
+
+        colVz.DataPropertyName = "Vz";
+
+        colVz.Width = 120;
+
+        // colLocation
+
+        colLocation.HeaderText = "Location";
+
+        colLocation.DataPropertyName = "Location";
+
+        colLocation.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+
+        // _log
+
+        _log.Location = new Point(12, 385);
+
+        _log.Multiline = true;
+
+        _log.Name = "_log";
+
+        _log.ScrollBars = ScrollBars.Vertical;
+
+        _log.WordWrap = false;
+
+        _log.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+
+        _log.Size = new Size(898, 260);
+
+        _log.TabIndex = 8;
 
         // Form1
-
-        // 
 
         AutoScaleDimensions = new SizeF(7F, 15F);
 
         AutoScaleMode = AutoScaleMode.Font;
 
-        AutoSize = true;
-
-        ClientSize = new Size(800, 714);
-
-        Controls.Add(textQueryPreview);
-
-        Controls.Add(textLineNumbers);
+        ClientSize = new Size(930, 660);
 
         Controls.Add(_log);
+
+        Controls.Add(dataGridAirplanes);
+
+        Controls.Add(btnRemoveSelected);
+
+        Controls.Add(btnAdd);
+
+        Controls.Add(txtLocation);
+
+        Controls.Add(txtVz);
+
+        Controls.Add(txtVh);
+
+        Controls.Add(lblLocation);
+
+        Controls.Add(lblVz);
+
+        Controls.Add(lblVh);
+
+        Controls.Add(textQueryPreview);
 
         Controls.Add(btnPull);
 
         Name = "Form1";
 
-        Text = "Form1";
+        Text = "PomReport";
 
         ResumeLayout(false);
 
@@ -187,11 +278,33 @@ partial class Form1
 
     private Button btnPull;
 
-    private TextBox _log;
-
-    private TextBox textLineNumbers;
-
     private TextBox textQueryPreview;
+
+    private Label lblVh;
+
+    private Label lblVz;
+
+    private Label lblLocation;
+
+    private TextBox txtVh;
+
+    private TextBox txtVz;
+
+    private TextBox txtLocation;
+
+    private Button btnAdd;
+
+    private Button btnRemoveSelected;
+
+    private DataGridView dataGridAirplanes;
+
+    private DataGridViewTextBoxColumn colVh;
+
+    private DataGridViewTextBoxColumn colVz;
+
+    private DataGridViewTextBoxColumn colLocation;
+
+    private TextBox _log;
 
 }
  

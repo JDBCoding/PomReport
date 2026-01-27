@@ -1,15 +1,26 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
+using PomReport.Config.Models;
+
 namespace PomReport.Config.Models
 {
-   public sealed class ShopConfig
+   public class ShopConfig
    {
-       public string ShopName { get; set; } = "";
-       // Since we run from the UNC folder, everything is relative to EXE folder by default.
-       public string ExportFolderName { get; set; } = "exports";
-       public string SnapshotFolderName { get; set; } = "snapshots";
-       public List<AirplanePair> Airplanes { get; set; } = new();
+       [JsonPropertyName("shopName")]
+       public string? ShopName { get; set; }
+       [JsonPropertyName("exportFolderName")]
+       public string? ExportFolderName { get; set; }
+       [JsonPropertyName("snapshotFolderName")]
+       public string? SnapshotFolderName { get; set; }
+       // IMPORTANT: matches "connectionString" in config.json
+       [JsonPropertyName("connectionString")]
+       public string? ConnectionString { get; set; }
+       [JsonPropertyName("airplanes")]
+       public List<PomReport.Config.Models.AirplanePair> Airplanes { get; set; } = new();
+       [JsonPropertyName("jobCategories")]
        public List<JobCategoryMap> JobCategories { get; set; } = new();
-       public DateTime LastUpdatedUtc { get; set; } = DateTime.UtcNow;
+       [JsonPropertyName("lastUpdatedUtc")]
+       public DateTime? LastUpdatedUtc { get; set; }
    }
 }
