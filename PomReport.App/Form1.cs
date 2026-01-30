@@ -1,6 +1,6 @@
 using System;
 
-using System.Collections.Generic;
+using System.ComponentModel;
 
 using System.IO;
 
@@ -26,7 +26,7 @@ namespace PomReport.App
 
     {
 
-        private readonly BindingSource _airplanesBinding = new BindingSource();
+        private readonly BindingList<AirplanePair> _pairs = new();
 
         public Form1()
 
@@ -36,25 +36,11 @@ namespace PomReport.App
 
             Load += Form1_Load;
 
-            // Wire events (designer does NOT wire these)
-
             btnPull.Click += btnPull_Click;
 
             btnAdd.Click += btnAdd_Click;
 
             btnRemoveSelected.Click += btnRemoveSelected_Click;
-
-            // Grid setup
-
-            dataGridAirplanes.AutoGenerateColumns = false;
-
-            dataGridAirplanes.MultiSelect = true;
-
-            dataGridAirplanes.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-
-            _airplanesBinding.DataSource = new List<AirplanePair>();
-
-            dataGridAirplanes.DataSource = _airplanesBinding;
 
         }
 
@@ -68,13 +54,19 @@ namespace PomReport.App
 
         }
 
-        private void SaveConfig(ShopConfig cfg)
+        private void SaveConfig()
 
         {
+
+            var cfg = LoadConfig();
+
+            cfg.Airplanes = _pairs.ToList();
 
             cfg.LastUpdatedUtc = DateTime.UtcNow;
 
             ConfigStore.Save(cfg);
+
+            Log($"Saved config: {ConfigStore.ConfigPath}");
 
         }
 
@@ -88,15 +80,17 @@ namespace PomReport.App
 
                 var cfg = LoadConfig();
 
+                _pairs.Clear();
+
+                foreach (var p in cfg.Airplanes)
+
+                    _pairs.Add(p);
+
+                dataGridAirplanes.DataSource = _pairs;
+
                 Log($"Config loaded from: {ConfigStore.ConfigPath}");
 
                 Log($"Airplanes in config: {cfg.Airplanes.Count}");
-
-                // bind airplanes
-
-                _airplanesBinding.DataSource = cfg.Airplanes;
-
-                _airplanesBinding.ResetBindings(false);
 
                 UpdateSqlPreview(cfg);
 
@@ -138,97 +132,33 @@ namespace PomReport.App
 
         {
 
-            try
+            var vh = txtVh.Text?.Trim() ?? "";
+
+            var vz = txtVz.Text?.Trim() ?? "";
+
+            var loc = txtLocation.Text?.Trim() ?? "";
+
+            if (string.IsNullOrWhiteSpace(vh) && string.IsNullOrWhiteSpace(vz))
 
             {
 
-                var cfg = LoadConfig();
+                MessageBox.Show("Enter at least VH or VZ.", "Missing value");
 
-                var vh = (txtVh.Text ?? "").Trim();
-
-                var vz = (txtVz.Text ?? "").Trim();
-
-                var loc = (txtLocation.Text ?? "").Trim();
-
-                // Rules:
-
-                // - You said: boom shop allows VZ without VH -> allow blank VH as long as VZ exists
-
-                // - But never allow both blank
-
-                if (string.IsNullOrWhiteSpace(vh) && string.IsNullOrWhiteSpace(vz))
-
-                {
-
-                    MessageBox.Show("Enter at least VH or VZ.", "Add airplane");
-
-                    return;
-
-                }
-
-                // Optional: avoid exact duplicates (same VH+VZ+Location)
-
-                bool duplicate = cfg.Airplanes.Any(a =>
-
-                    string.Equals((a.Vh ?? "").Trim(), vh, StringComparison.OrdinalIgnoreCase) &&
-
-                    string.Equals((a.Vz ?? "").Trim(), vz, StringComparison.OrdinalIgnoreCase) &&
-
-                    string.Equals((a.Location ?? "").Trim(), loc, StringComparison.OrdinalIgnoreCase)
-
-                );
-
-                if (duplicate)
-
-                {
-
-                    MessageBox.Show("That row already exists.", "Add airplane");
-
-                    return;
-
-                }
-
-                cfg.Airplanes.Add(new AirplanePair
-
-                {
-
-                    Vh = vh,
-
-                    Vz = vz,
-
-                    Location = loc
-
-                });
-
-                SaveConfig(cfg);
-
-                // refresh binding
-
-                _airplanesBinding.DataSource = cfg.Airplanes;
-
-                _airplanesBinding.ResetBindings(false);
-
-                // clear inputs
-
-                txtVh.Text = "";
-
-                txtVz.Text = "";
-
-                txtLocation.Text = "";
-
-                UpdateSqlPreview(cfg);
+                return;
 
             }
 
-            catch (Exception ex)
+            _pairs.Add(new AirplanePair { Vh = vh, Vz = vz, Location = loc });
 
-            {
+            txtVh.Clear();
 
-                Log(ex.ToString());
+            txtVz.Clear();
 
-                MessageBox.Show(ex.Message, "Add failed");
+            txtLocation.Clear();
 
-            }
+            SaveConfig();
+
+            UpdateSqlPreview(LoadConfig());
 
         }
 
@@ -236,63 +166,27 @@ namespace PomReport.App
 
         {
 
-            try
+            if (dataGridAirplanes.SelectedRows.Count == 0)
 
-            {
+                return;
 
-                if (dataGridAirplanes.SelectedRows.Count == 0)
+            var toRemove = dataGridAirplanes.SelectedRows
 
-                {
+                .Cast<DataGridViewRow>()
 
-                    MessageBox.Show("Select one or more rows to remove.", "Remove");
+                .Select(r => r.DataBoundItem)
 
-                    return;
+                .OfType<AirplanePair>()
 
-                }
+                .ToList();
 
-                var cfg = LoadConfig();
+            foreach (var p in toRemove)
 
-                // Gather selected items
+                _pairs.Remove(p);
 
-                var selected = new List<AirplanePair>();
+            SaveConfig();
 
-                foreach (DataGridViewRow row in dataGridAirplanes.SelectedRows)
-
-                {
-
-                    if (row.DataBoundItem is AirplanePair ap)
-
-                        selected.Add(ap);
-
-                }
-
-                if (selected.Count == 0) return;
-
-                // TRUE DELETE
-
-                foreach (var ap in selected)
-
-                    cfg.Airplanes.Remove(ap);
-
-                SaveConfig(cfg);
-
-                _airplanesBinding.DataSource = cfg.Airplanes;
-
-                _airplanesBinding.ResetBindings(false);
-
-                UpdateSqlPreview(cfg);
-
-            }
-
-            catch (Exception ex)
-
-            {
-
-                Log(ex.ToString());
-
-                MessageBox.Show(ex.Message, "Remove failed");
-
-            }
+            UpdateSqlPreview(LoadConfig());
 
         }
 
@@ -306,7 +200,15 @@ namespace PomReport.App
 
                 var cfg = LoadConfig();
 
-                // Build VH/VZ list for LineNumber IN (...)
+                if (string.IsNullOrWhiteSpace(cfg.ConnectionString))
+
+                {
+
+                    MessageBox.Show("config.json is missing 'connectionString'.", "Missing config");
+
+                    return;
+
+                }
 
                 var lineNumbers = cfg.Airplanes
 
@@ -316,7 +218,7 @@ namespace PomReport.App
 
                     .Select(s => s.Trim())
 
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Distinct()
 
                     .ToList();
 
@@ -330,13 +232,7 @@ namespace PomReport.App
 
                 }
 
-                var outputDir = Path.Combine(
-
-                    AppContext.BaseDirectory,
-
-                    cfg.ExportFolderName ?? "exports"
-
-                );
+                var outputDir = Path.Combine(AppContext.BaseDirectory, cfg.ExportFolderName ?? "exports");
 
                 Directory.CreateDirectory(outputDir);
 
@@ -344,11 +240,11 @@ namespace PomReport.App
 
                 Log($"Output directory: {outputDir}");
 
-                var cts = new CancellationTokenSource();
+                using var cts = new CancellationTokenSource();
 
                 var outFile = await SqlJobSource.PullToCsvAsync(
 
-                    cfg.ConnectionString ?? "",
+                    cfg.ConnectionString,
 
                     SqlQueries.MainQuery,
 
@@ -358,13 +254,15 @@ namespace PomReport.App
 
                     "PomReport",
 
-                    50000,
+                    commandTimeoutSeconds: 120,
 
                     cts.Token
 
                 );
 
                 Log($"CSV written: {outFile}");
+
+                MessageBox.Show($"CSV written:\n{outFile}", "Success");
 
             }
 
