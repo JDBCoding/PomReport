@@ -24,15 +24,22 @@ namespace PomReport.Config
            var json = JsonSerializer.Serialize(cfg, JsonOptions());
            File.WriteAllText(ConfigPath, json);
        }
-       public static void CreateDefaultIfMissing()
-       {
-           if (Exists()) return;
-           var cfg = new ShopConfig
-           {
-               ShopName = "New Shop"
-           };
-           Save(cfg);
-       }
+
+        public static void CreateDefaultIfMissing()
+        {
+            if (Exists()) return;
+            var starter = new ShopConfig
+            {
+                ConnectionString = "",
+                ShopName = "",
+                ExportFolderName = "exports",
+                SnapshotFolderName = "snapshots",
+                Airplanes = new() { new AirplanePair { Vh = "", Vz = "", Location = "" } },
+                JobCategories = new(),
+                LastUpdatedUtc = DateTime.UtcNow
+            };
+            Save(starter);
+        }
        private static JsonSerializerOptions JsonOptions() => new JsonSerializerOptions
        {
            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,

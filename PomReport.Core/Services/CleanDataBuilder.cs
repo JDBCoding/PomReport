@@ -1,6 +1,6 @@
-using PomReportCore.Models;
+using PomReport.Core.Models;
 
-namespace PomReportCore.Services;
+namespace PomReport.Core.Services;
 
 public sealed class CleanDataBuilder
 {

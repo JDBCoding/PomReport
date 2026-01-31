@@ -20,6 +20,7 @@ namespace PomReport.App
                    return;
                }
            }
+
            Application.Run(new Form1());
        }
    }

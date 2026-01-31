@@ -1,5 +1,5 @@
 using System.Text.Json;
-using PomReportCore.Models;
+using PomReport.Core.Models;
 
 namespace PomReportCore.Services;
 

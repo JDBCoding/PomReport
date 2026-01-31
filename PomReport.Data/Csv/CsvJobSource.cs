@@ -8,7 +8,7 @@ using System.IO;
 
 using Microsoft.VisualBasic.FileIO;
 
-using PomReport.Core.Models;
+using PomReport.Core.Core.Models;
 
 namespace PomReport.Data.Csv
 

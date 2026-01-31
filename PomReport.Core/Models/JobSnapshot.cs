@@ -1,11 +1,11 @@
-namespace PomReportCore.Models;
+namespace PomReport.Core.Models;
 
 public sealed class JobSnapshot
 {
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public string? CreatedBy { get; set; }   // optional: user/team lead name
     public string? Source { get; set; }      // optional: "SQL", "Test", etc.
-    public List<JobRecord> Jobs { get; set; } = new();
+    public List<SnapshotJob> Jobs { get; set; } = new();
 
     public JobSnapshot Normalized()
     {

@@ -1,6 +1,6 @@
 using System;
 
-namespace PomReport.Core.Models;
+namespace PomReport.Core.Core.Models;
 
 public sealed record JobRecord(
    long JobId,

@@ -1,4 +1,4 @@
-namespace PomReportCore.Models;
+namespace PomReport.Core.Models;
 
 public sealed record JobSortRule(
     string JobNumber,

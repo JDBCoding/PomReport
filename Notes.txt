@@ -60,4 +60,7 @@ namespace PomReport.Data
    }
 }
 
-   
+
+
+               "Password=0x9F4DE51F3477553AE46A752DD6B66FCEE;" +
+   $env:POM_CS="Server=pbebdsmessier.nos.boeing.com;Database=Newton_Release;User ID=SvcIedwhExcel;Password=0x9F4DE51F3477553AE46A752DD6B66FCEE;Encrypt=True;TrustServerCertificate=True;"

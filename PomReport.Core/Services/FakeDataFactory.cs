@@ -1,6 +1,7 @@
-using PomReportCore.Models;
+using System.Runtime.InteropServices.JavaScript;
+using PomReport.Core.Models;
 
-namespace PomReportCore.Services;
+namespace PomReport.Core.Services;
 
 public static class FakeDataFactory
 {
@@ -12,10 +13,10 @@ public static class FakeDataFactory
             Source = "Test",
             Jobs = new()
             {
-                new("VH110","842-PREFLIGHT-STC-006","12727994","PREFLIGHT INSPECTION KC-46","842-PREFLIGHT-STC-006","Preflight ~80% Complete"),
-                new("VH110","842-PREFLTLMI-STC-006","12734755","LAST MINUTE INSPECTION KC-46","LAST MINUTE INSPECTION KC-46",""),
-                new("VH111","842-PREFLIGHT-STC-001","12335491","PREFLIGHT INSPECTION KC-46","842-PREFLIGHT-STC-001","Preflight 98% Complete"),
-                new("VH110","842-349501_REM_LOG","12123560","UNPLANNED REMOVAL LOG","UNPLANNED REMOVAL LOG","Removed duct clamp - awaiting part"),
+                new SnapshotJob("VH110","842-PREFLIGHT-STC-006","12727994","PREFLIGHT INSPECTION KC-46","842-PREFLIGHT-STC-006","Preflight ~80% Complete"),
+                new SnapshotJob("VH110","842-PREFLTLMI-STC-006","12734755","LAST MINUTE INSPECTION KC-46","LAST MINUTE INSPECTION KC-46",""),
+                new SnapshotJob("VH111","842-PREFLIGHT-STC-001","12335491","PREFLIGHT INSPECTION KC-46","842-PREFLIGHT-STC-001","Preflight 98% Complete"),
+                new SnapshotJob("VH110","842-349501_REM_LOG","12123560","UNPLANNED REMOVAL LOG","UNPLANNED REMOVAL LOG","Removed duct clamp - awaiting part"),
             }
         }.Normalized();
     }

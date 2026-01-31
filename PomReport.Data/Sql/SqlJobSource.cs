@@ -16,7 +16,7 @@ using System.Threading.Tasks;
 
 using System.Data;
 
-using System.Data.OleDB;
+using System.Data.OleDb;
 
 namespace PomReport.Data.Sql
 
@@ -40,7 +40,7 @@ namespace PomReport.Data.Sql
 
         {
 
-            await using var conn = new SqlConnection(connectionString);
+            await using var conn = new OleDbConnection(connectionString);
 
             await conn.OpenAsync(ct);
 
@@ -74,23 +74,21 @@ namespace PomReport.Data.Sql
 
                 throw new ArgumentException("SQL template is empty.", nameof(sqlTemplate));
 
-            var lnList = lineNumbers?
+            var inList = lineNumbers?
 
-                .Select(x => x?.Trim())
+                .Select(x => x!)
 
                 .Where(x => !string.IsNullOrWhiteSpace(x))
 
-                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
-                .ToList() ?? new List<string>();
-
-            if (lnList.Count == 0)
+            if (inList.Count == 0)
 
                 throw new ArgumentException("No line numbers provided.", nameof(lineNumbers));
 
             // Build parameter names: @ln0,@ln1,...
 
-            var paramNames = lnList.Select((_, i) => $"@ln{i}").ToList();
+            var paramNames = inList.Select((_, i) => $"@ln{i}").ToList();
 
             var inParams = string.Join(", ", paramNames);
 
@@ -112,31 +110,34 @@ namespace PomReport.Data.Sql
 
             var fullPath = Path.Combine(outputFolder, fileName);
 
-            await using var conn = new SqlConnection(connectionString);
+            await using var conn = new OleDbConnection(connectionString);
 
             await conn.OpenAsync(ct);
 
-            await using var cmd = new SqlCommand(sql, conn)
+            await using var cmd = new OleDbCommand("SELECT @@VERSION", conn);
+            var v = cmd.ExecuteScalar();
 
             {
 
-                CommandTimeout = commandTimeoutSeconds
+                cmd.CommandTimeout = commandTimeoutSeconds;
 
             };
 
             // Add parameters safely
 
-            for (int i = 0; i < lnList.Count; i++)
+            for (int i = 0; i < inList.Count; i++)
 
             {
 
                 // Adjust size if needed; 50 is usually plenty for VH/VZ/LineNumber values
 
-                cmd.Parameters.Add(new SqlParameter(paramNames[i], System.Data.SqlDbType.VarChar, 50)
+                cmd.Parameters.Add(new OleDbParameter
 
                 {
 
-                    Value = lnList[i]
+                    OleDbType = OleDbType.VarChar,
+                    Size = 50,
+                    Value = inList[i]
 
                 });
 

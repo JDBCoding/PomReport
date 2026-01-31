@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using PomReport.Core.Models;
+using PomReport.Core.Core.Models;
 namespace PomReport.Data.Fake
 {
    public static class FakeJobSource

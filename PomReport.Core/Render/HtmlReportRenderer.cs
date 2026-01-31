@@ -8,7 +8,7 @@ using System.Net;
 
 using System.Text;
 
-using PomReport.Core.Models;
+using PomReport.Core.Core.Models;
 
 namespace PomReport.Core.Render
 

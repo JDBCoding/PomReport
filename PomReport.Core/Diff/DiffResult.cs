@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-namespace PomReport.Core.Models;
+namespace PomReport.Core.Core.Models;
 public sealed record DiffResult(
    IReadOnlyList<JobRecord> Added,
    IReadOnlyList<JobRecord> Completed,

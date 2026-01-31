@@ -6,4 +6,5 @@
 # Build output
 **/bin/
 **/obj/
-.vs/
+.vs/appsettings.json
+config.json
