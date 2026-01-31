@@ -1,7 +1,7 @@
 using System.Text.Json;
 using PomReport.Core.Models;
 
-namespace PomReportCore.Services;
+namespace PomReport.Core.Services;
 
 public sealed class LineStatusRepository
 {

@@ -1,12 +1,22 @@
 using System;
 
+using System.IO;
+
 using System.Linq;
+
+using System.Collections.Generic;
+
+using System.Text.Json;
 
 using System.Windows.Forms;
 
 using PomReport.Config;
 
 using PomReport.Config.Models;
+
+using PomReport.Core.Models;
+
+using PomReport.Core.Services;
 
 namespace PomReport.App
 
@@ -15,14 +25,6 @@ namespace PomReport.App
     public partial class SetupForm : Form
 
     {
-
-        public SetupForm()
-
-        {
-
-            InitializeComponent();
-
-        }
 
         private TextBox txtShop = null!;
 
@@ -34,17 +36,27 @@ namespace PomReport.App
 
         private Button btnCancel = null!;
 
+        private Button btnPull = null!;
+
+        private Button btnTestPipeline = null!;
+
+        public SetupForm()
+
+        {
+
+            InitializeComponent();
+
+        }
+
         private void InitializeComponent()
 
         {
 
-            this.Text = "PomReport - First Run Setup";
+            Text = "setup form testing";
+            
+            Height = 760;
 
-            this.Width = 900;
-
-            this.Height = 700;
-
-            this.StartPosition = FormStartPosition.CenterScreen;
+            StartPosition = FormStartPosition.CenterScreen;
 
             var lblShop = new Label { Left = 15, Top = 15, Width = 250, Text = "Shop Name" };
 
@@ -114,35 +126,157 @@ namespace PomReport.App
 
             };
 
-            btnSave = new Button { Left = 15, Top = 600, Width = 160, Text = "Save Setup" };
+            btnSave = new Button { Left = 15, Top = 610, Width = 160, Text = "Save Setup" };
 
-            btnCancel = new Button { Left = 190, Top = 600, Width = 160, Text = "Cancel" };
+            btnCancel = new Button { Left = 190, Top = 610, Width = 160, Text = "Cancel" };
+
+            btnPull = new Button { Left = 370, Top = 610, Width = 160, Text = "Pull Data" };
+
+            btnTestPipeline = new Button { Left = 545, Top = 610, Width = 200, Text = "Test Pipeline" };
 
             btnSave.Click += BtnSave_Click;
 
-            btnCancel.Click += (s, e) => { this.DialogResult = DialogResult.Cancel; this.Close(); };
+            btnCancel.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
 
-            this.Controls.Add(lblShop);
+            btnPull.Click += Btnpull_click;
 
-            this.Controls.Add(txtShop);
+            btnTestPipeline.Click += btnTestPipeline_Click;
 
-            this.Controls.Add(lblAir);
+            Controls.Add(lblShop);
 
-            this.Controls.Add(txtAirplanes);
+            Controls.Add(txtShop);
 
-            this.Controls.Add(lblCat);
+            Controls.Add(lblAir);
 
-            this.Controls.Add(txtCategories);
+            Controls.Add(txtAirplanes);
 
-            this.Controls.Add(btnSave);
+            Controls.Add(lblCat);
 
-            this.Controls.Add(btnCancel);
+            Controls.Add(txtCategories);
 
-            // helpful defaults
+            Controls.Add(btnSave);
 
-            txtAirplanes.Text = "VH123=VZ901|Position 1\r\nVH124=VZ910|Position 2";
+            Controls.Add(btnCancel);
+
+            Controls.Add(btnPull);
+
+            Controls.Add(btnTestPipeline);
+
+            // Helpful defaults
+
+            txtAirplanes.Text = "VH110=VZ475|STALL 212\r\nVH111=VZ421|STALL 213";
 
             txtCategories.Text = "IP100=Hydraulics\r\nIP200=Electrical";
+
+        }
+
+        private async void Btnpull_click(object? sender, EventArgs e)
+
+        {
+
+            MessageBox.Show(
+
+                "SQL pull wiring comes next.\r\nThis button is intentionally live but not implemented yet.",
+
+                "PomReport",
+
+                MessageBoxButtons.OK,
+
+                MessageBoxIcon.Information
+
+            );
+
+            await Task.CompletedTask;
+
+        }
+
+        private async void btnTestPipeline_Click(object? sender, EventArgs e)
+
+        {
+
+            try
+
+            {
+
+                var baseDir = Path.Combine(AppContext.BaseDirectory, "data");
+
+                var snapDir = Path.Combine(baseDir, "snapshots");
+
+                var cfgDir = Path.Combine(baseDir, "config");
+
+                Directory.CreateDirectory(snapDir);
+
+                Directory.CreateDirectory(cfgDir);
+
+                var store = new SnapshotStore(snapDir);
+
+                var baseline = FakeDataFactory.BaselineSnapshot();
+
+                var current = FakeDataFactory.CurrentSnapshot();
+
+                await store.SaveSnapshotAsync(baseline);
+
+                await store.SaveSnapshotAsync(current);
+
+                var chosenBaseline = await store.GetBaselineSnapshotAsync(
+
+                    TimeSpan.FromHours(4),
+
+                    DateTimeOffset.UtcNow
+
+                );
+
+                var jobSortMap = FakeDataFactory.JobSortRules()
+
+                    .ToDictionary(x => x.JobNumber, x => x);
+
+                var compare = new CompareEngine()
+
+                    .Compare(current, chosenBaseline, jobSortMap);
+
+                var clean = new CleanDataBuilder()
+
+                    .Build(current, compare, jobSortMap, new Dictionary<string, LineStatusEntry>());
+
+                var outPath = Path.Combine(baseDir, "clean_preview.json");
+
+                await File.WriteAllTextAsync(
+
+                    outPath,
+
+                    JsonSerializer.Serialize(clean, new JsonSerializerOptions { WriteIndented = true })
+
+                );
+
+                MessageBox.Show(
+
+                    $"Pipeline OK\r\n\r\n" +
+
+                    $"New: {compare.NewJobs.Count}\r\n" +
+
+                    $"Completed: {compare.CompletedJobs.Count}\r\n" +
+
+                    $"Sold: {compare.SoldJobs.Count}\r\n\r\n" +
+
+                    $"Output:\r\n{outPath}",
+
+                    "Pipeline Test",
+
+                    MessageBoxButtons.OK,
+
+                    MessageBoxIcon.Information
+
+                );
+
+            }
+
+            catch (Exception ex)
+
+            {
+
+                MessageBox.Show(ex.ToString(), "Pipeline Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+
+            }
 
         }
 
@@ -158,13 +292,13 @@ namespace PomReport.App
 
                 {
 
-                    ShopName = (txtShop.Text ?? "").Trim()
+                    ShopName = (txtShop.Text ?? "").Trim(),
+
+                    Airplanes = ParseAirplanes(txtAirplanes.Text),
+
+                    JobCategories = ParseCategories(txtCategories.Text)
 
                 };
-
-                cfg.Airplanes = ParseAirplanes(txtAirplanes.Text);
-
-                cfg.JobCategories = ParseCategories(txtCategories.Text);
 
                 if (cfg.Airplanes.Count == 0)
 
@@ -174,7 +308,7 @@ namespace PomReport.App
 
                 MessageBox.Show(
 
-                    $"Saved config to:\n\n{ConfigStore.ConfigPath}",
+                    $"Saved config to:\r\n\r\n{ConfigStore.ConfigPath}",
 
                     "PomReport",
 
@@ -183,10 +317,6 @@ namespace PomReport.App
                     MessageBoxIcon.Information
 
                 );
-
-                this.DialogResult = DialogResult.OK;
-
-                this.Close();
 
             }
 
@@ -200,11 +330,11 @@ namespace PomReport.App
 
         }
 
-        private static System.Collections.Generic.List<AirplanePair> ParseAirplanes(string text)
+        private static List<AirplanePair> ParseAirplanes(string text)
 
         {
 
-            var list = new System.Collections.Generic.List<AirplanePair>();
+            var list = new List<AirplanePair>();
 
             var lines = (text ?? "")
 
@@ -212,59 +342,43 @@ namespace PomReport.App
 
                 .Select(l => l.Trim())
 
-                .Where(l => !string.IsNullOrWhiteSpace(l))
-
-                .ToList();
+                .Where(l => !string.IsNullOrWhiteSpace(l));
 
             foreach (var line in lines)
 
             {
 
-                // VH123=VZ901|Location optional
-
                 var parts = line.Split('|');
 
-                var pairPart = parts[0].Trim();
-
-                var location = parts.Length > 1 ? parts[1].Trim() : "";
-
-                var kv = pairPart.Split('=');
+                var kv = parts[0].Split('=');
 
                 if (kv.Length != 2)
 
-                    throw new Exception($"Invalid airplane line: '{line}'. Use VH###=VZ###|Optional Location");
+                    throw new Exception($"Invalid airplane line: {line}");
 
-                var vh = kv[0].Trim();
+                list.Add(new AirplanePair
 
-                var vz = kv[1].Trim();
+                {
 
-                if (string.IsNullOrWhiteSpace(vh) || string.IsNullOrWhiteSpace(vz))
+                    Vh = kv[0].Trim(),
 
-                    throw new Exception($"Invalid VH/VZ in line: '{line}'.");
+                    Vz = kv[1].Trim(),
 
-                list.Add(new AirplanePair { Vh = vh, Vz = vz, Location = location });
+                    Location = parts.Length > 1 ? parts[1].Trim() : ""
+
+                });
 
             }
-
-            // 1:1 enforcement
-
-            if (list.GroupBy(x => x.Vh, StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1))
-
-                throw new Exception("Duplicate VH found. Each VH must appear only once.");
-
-            if (list.GroupBy(x => x.Vz, StringComparer.OrdinalIgnoreCase).Any(g => g.Count() > 1))
-
-                throw new Exception("Duplicate VZ found. Each VZ must appear only once.");
 
             return list;
 
         }
 
-        private static System.Collections.Generic.List<JobCategoryMap> ParseCategories(string text)
+        private static List<JobCategoryMap> ParseCategories(string text)
 
         {
 
-            var list = new System.Collections.Generic.List<JobCategoryMap>();
+            var list = new List<JobCategoryMap>();
 
             var lines = (text ?? "")
 
@@ -272,9 +386,7 @@ namespace PomReport.App
 
                 .Select(l => l.Trim())
 
-                .Where(l => !string.IsNullOrWhiteSpace(l))
-
-                .ToList();
+                .Where(l => !string.IsNullOrWhiteSpace(l));
 
             foreach (var line in lines)
 
@@ -284,17 +396,17 @@ namespace PomReport.App
 
                 if (kv.Length != 2)
 
-                    throw new Exception($"Invalid category line: '{line}'. Use IP###=CategoryName");
+                    throw new Exception($"Invalid category line: {line}");
 
-                var ip = kv[0].Trim();
+                list.Add(new JobCategoryMap
 
-                var cat = kv[1].Trim();
+                {
 
-                if (string.IsNullOrWhiteSpace(ip) || string.IsNullOrWhiteSpace(cat))
+                    Ip = kv[0].Trim(),
 
-                    throw new Exception($"Invalid IP/Category in line: '{line}'.");
+                    Category = kv[1].Trim()
 
-                list.Add(new JobCategoryMap { Ip = ip, Category = cat });
+                });
 
             }
 

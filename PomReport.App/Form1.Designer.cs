@@ -30,6 +30,8 @@ partial class Form1
 
         btnPull = new Button();
 
+        btnTestPipeline = new Button();
+
         textQueryPreview = new TextBox();
 
         _log = new TextBox();
@@ -56,7 +58,19 @@ partial class Form1
 
         // ✅ Correct: wire the BUTTON click
 
-        btnPull.Click += btnPull_Click;
+        btnPull.Click += Btnpull_click;
+
+
+        // 
+        // btnTestPipeline
+        // 
+        btnTestPipeline.Location = new Point(12, 44);
+        btnTestPipeline.Name = "btnTestPipeline";
+        btnTestPipeline.Size = new Size(313, 28);
+        btnTestPipeline.TabIndex = 1;
+        btnTestPipeline.Text = "Test Pipeline (Fake Data)";
+        btnTestPipeline.UseVisualStyleBackColor = true;
+        btnTestPipeline.Click += btnTestPipeline_Click;
 
         // 
 
@@ -80,7 +94,7 @@ partial class Form1
 
         textQueryPreview.Size = new Size(776, 110);
 
-        textQueryPreview.TabIndex = 1;
+        textQueryPreview.TabIndex = 2;
 
         textQueryPreview.WordWrap = false;
 
@@ -102,7 +116,7 @@ partial class Form1
 
         _log.Size = new Size(776, 240);
 
-        _log.TabIndex = 2;
+        _log.TabIndex = 3;
 
         _log.WordWrap = false;
 
@@ -122,6 +136,8 @@ partial class Form1
 
         Controls.Add(textQueryPreview);
 
+        Controls.Add(btnTestPipeline);
+
         Controls.Add(btnPull);
 
         Name = "Form1";
@@ -137,6 +153,8 @@ partial class Form1
     #endregion
 
     private Button btnPull;
+
+    private Button btnTestPipeline;
 
     private TextBox textQueryPreview;
 
