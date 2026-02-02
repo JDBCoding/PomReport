@@ -28,591 +28,536 @@ using PomReport.Core.Services;
 
 
 
-namespace PomReport.App
+namespace PomReport.App {
 
-{
+    public partial class Form1 : Form {
 
-   public partial class Form1 : Form
+        private readonly BindingList<AirplanePair> _pairs = new();
 
-   {
+        private FlowLayoutPanel? _rootPanel;
 
-       private readonly BindingList<AirplanePair> _pairs = new();
+        private DataGridView? _grid;
 
-       private FlowLayoutPanel? _rootPanel;
+        private TextBox? _txtVh;
 
-       private DataGridView? _grid;
+        private TextBox? _txtVz;
 
-       private TextBox? _txtVh;
+        private TextBox? _txtLocation;
 
-       private TextBox? _txtVz;
+        private Button? _btnAdd;
 
-       private TextBox? _txtLocation;
+        private Button? _btnRemove;
 
-       private Button? _btnAdd;
+        private Button? _btnPull;
 
-       private Button? _btnRemove;
+        private Button? _btnTestPipeline;
 
-       private Button? _btnPull;
+        public Form1() {
 
-       private Button? _btnTestPipeline;
+            InitializeComponent();
 
-       public Form1()
+            Text = "Form1 - Testing";
 
-       {
+            BuildAirplaneEditorUi();
 
-           InitializeComponent();
+            // Load config into grid + preview on startup
 
-           Text = "Form1 - Testing";
+            Load += (_, __) => LoadConfigIntoGridAndPreview();
 
-           BuildAirplaneEditorUi();
+        }
 
-           // Load config into grid + preview on startup
+        // ------------------------------------------------------------
 
-           Load += (_, __) => LoadConfigIntoGridAndPreview();
+        // UI BUILD (Table + Add/Remove only)
 
-       }
+        // ------------------------------------------------------------
 
-       // ------------------------------------------------------------
+        private void BuildAirplaneEditorUi() {
 
-       // UI BUILD (Table + Add/Remove only)
+            _rootPanel = new FlowLayoutPanel {
 
-       // ------------------------------------------------------------
+                Dock = DockStyle.Top,
 
-       private void BuildAirplaneEditorUi()
+                Height = 220,
 
-       {
+                AutoSize = false,
 
-           _rootPanel = new FlowLayoutPanel
+                WrapContents = false,
 
-           {
+                FlowDirection = FlowDirection.TopDown,
 
-               Dock = DockStyle.Top,
+                Padding = new Padding(12, 12, 12, 8)
 
-               Height = 220,
+            };
 
-               AutoSize = false,
+            var addRow = new FlowLayoutPanel {
 
-               WrapContents = false,
+                AutoSize = true,
 
-               FlowDirection = FlowDirection.TopDown,
+                WrapContents = false
 
-               Padding = new Padding(12, 12, 12, 8)
+            };
 
-           };
+            addRow.Controls.Add(new Label { Text = "VH:", AutoSize = true, Padding = new Padding(0, 6, 0, 0) });
 
-           var addRow = new FlowLayoutPanel
+            _txtVh = new TextBox { Width = 90, PlaceholderText = "VH123" };
 
-           {
+            addRow.Controls.Add(_txtVh);
 
-               AutoSize = true,
+            addRow.Controls.Add(new Label { Text = "VZ:", AutoSize = true, Padding = new Padding(8, 6, 0, 0) });
 
-               WrapContents = false
+            _txtVz = new TextBox { Width = 90, PlaceholderText = "VZ901" };
 
-           };
+            addRow.Controls.Add(_txtVz);
 
-           addRow.Controls.Add(new Label { Text = "VH:", AutoSize = true, Padding = new Padding(0, 6, 0, 0) });
+            addRow.Controls.Add(new Label { Text = "Location:", AutoSize = true, Padding = new Padding(8, 6, 0, 0) });
 
-           _txtVh = new TextBox { Width = 90, PlaceholderText = "VH123" };
+            _txtLocation = new TextBox { Width = 140, PlaceholderText = "Stall 212" };
 
-           addRow.Controls.Add(_txtVh);
+            addRow.Controls.Add(_txtLocation);
 
-           addRow.Controls.Add(new Label { Text = "VZ:", AutoSize = true, Padding = new Padding(8, 6, 0, 0) });
+            _btnAdd = new Button { Text = "Add", Width = 80, Height = 28, Margin = new Padding(12, 2, 0, 0) };
 
-           _txtVz = new TextBox { Width = 90, PlaceholderText = "VZ901" };
+            _btnAdd.Click += (_, __) => AddPair();
 
-           addRow.Controls.Add(_txtVz);
+            addRow.Controls.Add(_btnAdd);
 
-           addRow.Controls.Add(new Label { Text = "Location:", AutoSize = true, Padding = new Padding(8, 6, 0, 0) });
+            _btnRemove = new Button { Text = "Remove Selected", Width = 140, Height = 28, Margin = new Padding(8, 2, 0, 0) };
 
-           _txtLocation = new TextBox { Width = 140, PlaceholderText = "Stall 212" };
+            _btnRemove.Click += (_, __) => RemoveSelectedPair();
 
-           addRow.Controls.Add(_txtLocation);
+            addRow.Controls.Add(_btnRemove);
 
-           _btnAdd = new Button { Text = "Add", Width = 80, Height = 28, Margin = new Padding(12, 2, 0, 0) };
+            // New buttons (Pull + Test Pipeline)
 
-           _btnAdd.Click += (_, __) => AddPair();
+            _btnPull = new Button { Text = "Pull Data", Width = 110, Height = 28, Margin = new Padding(12, 2, 0, 0) };
 
-           addRow.Controls.Add(_btnAdd);
+            _btnPull.Click += Btnpull_click;
 
-           _btnRemove = new Button { Text = "Remove Selected", Width = 140, Height = 28, Margin = new Padding(8, 2, 0, 0) };
+            addRow.Controls.Add(_btnPull);
 
-           _btnRemove.Click += (_, __) => RemoveSelectedPair();
+            _btnTestPipeline = new Button { Text = "Test Pipeline", Width = 120, Height = 28, Margin = new Padding(8, 2, 0, 0) };
 
-           addRow.Controls.Add(_btnRemove);
+            _btnTestPipeline.Click += btnTestPipeline_Click;
 
-           // New buttons (Pull + Test Pipeline)
+            addRow.Controls.Add(_btnTestPipeline);
 
-           _btnPull = new Button { Text = "Pull Data", Width = 110, Height = 28, Margin = new Padding(12, 2, 0, 0) };
+            _grid = new DataGridView {
 
-           _btnPull.Click += Btnpull_click;
+                Width = 760,
 
-           addRow.Controls.Add(_btnPull);
+                Height = 160,
 
-           _btnTestPipeline = new Button { Text = "Test Pipeline", Width = 120, Height = 28, Margin = new Padding(8, 2, 0, 0) };
+                AutoGenerateColumns = false,
 
-           _btnTestPipeline.Click += btnTestPipeline_Click;
+                AllowUserToAddRows = false,
 
-           addRow.Controls.Add(_btnTestPipeline);
+                AllowUserToDeleteRows = false,
 
-           _grid = new DataGridView
+                AllowUserToResizeRows = false,
 
-           {
+                ReadOnly = true, // add/remove ONLY
 
-               Width = 760,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
 
-               Height = 160,
+                MultiSelect = false
 
-               AutoGenerateColumns = false,
+            };
 
-               AllowUserToAddRows = false,
+            _grid.Columns.Add(new DataGridViewTextBoxColumn {
 
-               AllowUserToDeleteRows = false,
+                DataPropertyName = nameof(AirplanePair.Vh),
 
-               AllowUserToResizeRows = false,
+                HeaderText = "VH",
 
-               ReadOnly = true, // add/remove ONLY
+                Width = 90
 
-               SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+            });
 
-               MultiSelect = false
+            _grid.Columns.Add(new DataGridViewTextBoxColumn {
 
-           };
+                DataPropertyName = nameof(AirplanePair.Vz),
 
-           _grid.Columns.Add(new DataGridViewTextBoxColumn
+                HeaderText = "VZ",
 
-           {
+                Width = 90
 
-               DataPropertyName = nameof(AirplanePair.Vh),
+            });
 
-               HeaderText = "VH",
+            _grid.Columns.Add(new DataGridViewTextBoxColumn {
 
-               Width = 90
+                DataPropertyName = nameof(AirplanePair.Location),
 
-           });
+                HeaderText = "Location",
 
-           _grid.Columns.Add(new DataGridViewTextBoxColumn
+                Width = 140
 
-           {
-
-               DataPropertyName = nameof(AirplanePair.Vz),
-
-               HeaderText = "VZ",
-
-               Width = 90
-
-           });
-
-           _grid.Columns.Add(new DataGridViewTextBoxColumn
-
-           {
-
-               DataPropertyName = nameof(AirplanePair.Location),
-
-               HeaderText = "Location",
-
-               Width = 140
-
-           });
+            });
 
            _grid.DataSource = _pairs;
 
-           _rootPanel.Controls.Add(addRow);
+            _rootPanel.Controls.Add(addRow);
 
-           _rootPanel.Controls.Add(_grid);
+            _rootPanel.Controls.Add(_grid);
 
-           Controls.Add(_rootPanel);
+            Controls.Add(_rootPanel);
 
-           _rootPanel.BringToFront();
+            _rootPanel.BringToFront();
 
-       }
+        }
 
-       // ------------------------------------------------------------
+        // ------------------------------------------------------------
 
-       // CONFIG LOAD/SAVE + PREVIEW
+        // CONFIG LOAD/SAVE + PREVIEW
 
-       // ------------------------------------------------------------
+        // ------------------------------------------------------------
 
-       private void LoadConfigIntoGridAndPreview()
+        private void LoadConfigIntoGridAndPreview() {
 
-       {
+            try {
 
-           try
+                if (!ConfigStore.Exists()) {
 
-           {
+                    _log.AppendText("No config.json found. Use SetupForm on first run." + Environment.NewLine);
 
-               if (!ConfigStore.Exists())
+                    return;
 
-               {
+                }
 
-                   _log.AppendText("No config.json found. Use SetupForm on first run." + Environment.NewLine);
+                var cfg = ConfigStore.Load();
 
-                   return;
+                _pairs.Clear();
 
-               }
+                foreach (var p in cfg.Airplanes)
 
-               var cfg = ConfigStore.Load();
+                    _pairs.Add(p);
 
-               _pairs.Clear();
+                var lineNumbers = BuildLineNumbersForSql(cfg.Airplanes);
 
-               foreach (var p in cfg.Airplanes)
+                _log.Clear();
 
-                   _pairs.Add(p);
+                _log.AppendText($"Config: {ConfigStore.ConfigPath}{Environment.NewLine}");
 
-               var lineNumbers = BuildLineNumbersForSql(cfg.Airplanes);
+                _log.AppendText($"Airplanes rows: {_pairs.Count}{Environment.NewLine}");
 
-               _log.Clear();
+                _log.AppendText($"LineNumbers passed to SQL: {lineNumbers.Count}{Environment.NewLine}");
 
-               _log.AppendText($"Config: {ConfigStore.ConfigPath}{Environment.NewLine}");
+                // Preview clause
 
-               _log.AppendText($"Airplanes rows: {_pairs.Count}{Environment.NewLine}");
+                var clause = "AND jl.LineNumber IN (" +
 
-               _log.AppendText($"LineNumbers passed to SQL: {lineNumbers.Count}{Environment.NewLine}");
+                             string.Join(", ", lineNumbers.Select(x => $"'{x}'")) +
 
-               // Preview clause
+                             ")";
 
-               var clause = "AND jl.LineNumber IN (" +
+            }
 
-                            string.Join(", ", lineNumbers.Select(x => $"'{x}'")) +
+            catch (Exception ex) {
 
-                            ")";
+                _log.AppendText(ex.ToString() + Environment.NewLine);
 
-           }
+            }
 
-           catch (Exception ex)
+        }
 
-           {
+        private static List<string> BuildLineNumbersForSql(List<AirplanePair> airplanes) {
 
-               _log.AppendText(ex.ToString() + Environment.NewLine);
+            var list = new List<string>();
 
-           }
+            foreach (var a in airplanes) {
 
-       }
+                if (!string.IsNullOrWhiteSpace(a.Vh)) list.Add(a.Vh.Trim());
 
-       private static List<string> BuildLineNumbersForSql(List<AirplanePair> airplanes)
+                if (!string.IsNullOrWhiteSpace(a.Vz)) list.Add(a.Vz.Trim());
 
-       {
+            }
 
-           var list = new List<string>();
+            // Make distinct while preserving order (case-insensitive)
 
-           foreach (var a in airplanes)
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-           {
+            var distinct = new List<string>();
 
-               if (!string.IsNullOrWhiteSpace(a.Vh)) list.Add(a.Vh.Trim());
+            foreach (var s in list) {
 
-               if (!string.IsNullOrWhiteSpace(a.Vz)) list.Add(a.Vz.Trim());
+                if (seen.Add(s))
 
-           }
+                    distinct.Add(s);
 
-           // Make distinct while preserving order (case-insensitive)
+            }
 
-           var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            return distinct;
 
-           var distinct = new List<string>();
+        }
 
-           foreach (var s in list)
+        private void AddPair() {
 
-           {
+            if (_txtVh == null || _txtVz == null || _txtLocation == null) return;
 
-               if (seen.Add(s))
+            var vh = (_txtVh.Text ?? "").Trim();
 
-                   distinct.Add(s);
+            var vz = (_txtVz.Text ?? "").Trim();
 
-           }
+            var loc = (_txtLocation.Text ?? "").Trim();
 
-           return distinct;
+            if (string.IsNullOrWhiteSpace(vh) && string.IsNullOrWhiteSpace(vz))
 
-       }
+                return;
 
-       private void AddPair()
+            _pairs.Add(new AirplanePair { Vh = vh, Vz = vz, Location = loc });
 
-       {
+            _txtVh.Text = "";
 
-           if (_txtVh == null || _txtVz == null || _txtLocation == null) return;
+            _txtVz.Text = "";
 
-           var vh = (_txtVh.Text ?? "").Trim();
+            _txtLocation.Text = "";
 
-           var vz = (_txtVz.Text ?? "").Trim();
+        }
 
-           var loc = (_txtLocation.Text ?? "").Trim();
+        private void RemoveSelectedPair() {
 
-           if (string.IsNullOrWhiteSpace(vh) && string.IsNullOrWhiteSpace(vz))
+            if (_grid == null) return;
 
-               return;
+            if (_grid.SelectedRows.Count == 0) return;
 
-           _pairs.Add(new AirplanePair { Vh = vh, Vz = vz, Location = loc });
+            var row = _grid.SelectedRows[0];
 
-           _txtVh.Text = "";
+            if (row.DataBoundItem is AirplanePair pair)
 
-           _txtVz.Text = "";
+                _pairs.Remove(pair);
 
-           _txtLocation.Text = "";
+        }
 
-       }
+        // ------------------------------------------------------------
 
-       private void RemoveSelectedPair()
+        // BUTTON: Pull DB -> Save CSV (alias for designer request)
 
-       {
+        // ------------------------------------------------------------
 
-           if (_grid == null) return;
+        private void Btnpull_click(object sender, EventArgs e) {
 
-           if (_grid.SelectedRows.Count == 0) return;
+            // Wrapper to keep existing handler intact
 
-           var row = _grid.SelectedRows[0];
+            btnPull_Click(sender, e);
 
-           if (row.DataBoundItem is AirplanePair pair)
+        }
 
-               _pairs.Remove(pair);
+        // ------------------------------------------------------------
 
-       }
+        // BUTTON: Pull DB -> Save CSV
 
-       // ------------------------------------------------------------
+        // ------------------------------------------------------------
 
-       // BUTTON: Pull DB -> Save CSV (alias for designer request)
+        private async void btnPull_Click(object? sender, EventArgs e) {
 
-       // ------------------------------------------------------------
+            try {
 
-       private void Btnpull_click(object sender, EventArgs e)
+                var cfg = ConfigStore.Load();
 
-       {
+                var lineNumbers = BuildLineNumbersForSql(cfg.Airplanes);
 
-           // Wrapper to keep existing handler intact
+                if (lineNumbers.Count == 0) {
 
-           btnPull_Click(sender, e);
+                    MessageBox.Show("No VH/VZ values configured. Add rows first.", "PomReport",
 
-       }
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-       // ------------------------------------------------------------
+                    return;
 
-       // BUTTON: Pull DB -> Save CSV
+                }
 
-       // ------------------------------------------------------------
+                if (string.IsNullOrWhiteSpace(cfg.ConnectionString)) {
 
-       private async void btnPull_Click(object? sender, EventArgs e)
+                    MessageBox.Show("Missing connectionString in config.json (next to the EXE).", "PomReport",
 
-       {
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
 
-           try
+                    return;
 
-           {
+                }
 
-               var cfg = ConfigStore.Load();
+                var exportDir = Path.Combine(AppContext.BaseDirectory, cfg.ExportFolderName ?? "exports");
 
-               var lineNumbers = BuildLineNumbersForSql(cfg.Airplanes);
+                Directory.CreateDirectory(exportDir);
 
-               if (lineNumbers.Count == 0)
+                Log("Running SQL pull...");
 
-               {
+                Log($"Export folder: {exportDir}");
 
-                   MessageBox.Show("No VH/VZ values configured. Add rows first.", "PomReport",
+                Log($"LineNumbers: {lineNumbers.Count}");
 
-                       MessageBoxButtons.OK, MessageBoxIcon.Information);
+                using var cts = new CancellationTokenSource();
 
-                   return;
+                var outFile = await SqlJobSource.PullToCsvAsync(
 
-               }
+                    cfg.ConnectionString,
 
-               if (string.IsNullOrWhiteSpace(cfg.ConnectionString))
+                    SqlQueries.MainQuery,
 
-               {
+                    lineNumbers,
 
-                   MessageBox.Show("Missing connectionString in config.json (next to the EXE).", "PomReport",
+                    exportDir,
 
-                       MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    string.IsNullOrWhiteSpace(cfg.ShopName) ? "PomReport" : cfg.ShopName,
 
-                   return;
+                    ct: cts.Token
 
-               }
+                );
 
-               var exportDir = Path.Combine(AppContext.BaseDirectory, cfg.ExportFolderName ?? "exports");
+                Log($"CSV written: {outFile}");
 
-               Directory.CreateDirectory(exportDir);
+                MessageBox.Show($"Done.\n\n{outFile}", "PomReport",
 
-               Log("Running SQL pull...");
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-               Log($"Export folder: {exportDir}");
+            }
 
-               Log($"LineNumbers: {lineNumbers.Count}");
+            catch (Exception ex) {
 
-               using var cts = new CancellationTokenSource();
+                Log(ex.ToString());
 
-               var outFile = await SqlJobSource.PullToCsvAsync(
+                MessageBox.Show(ex.Message, "PomReport - Pull Error",
 
-                   cfg.ConnectionString,
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
 
-                   SqlQueries.MainQuery,
+            }
 
-                   lineNumbers,
+        }
 
-                   exportDir,
+        // ------------------------------------------------------------
 
-                   string.IsNullOrWhiteSpace(cfg.ShopName) ? "PomReport" : cfg.ShopName,
+        // BUTTON: Test Pipeline (Fake NewData -> Baseline(4h) -> Compare -> CleanData)
 
-                   ct: cts.Token
+        // Writes outputs under BIN\data for quick testing.
 
-               );
+        // ------------------------------------------------------------
 
-               Log($"CSV written: {outFile}");
+        private async void btnTestPipeline_Click(object sender, EventArgs e) {
+            // Ensure Plan Sort template exists for the shop
+            var configDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data", "config");
+            var planSortPath = Path.Combine(configDir, "plan_sort.csv");
+            var planSortRepo = new PomReportCore.Services.PlanSortRepository(planSortPath);
+            planSortRepo.WriteTemplate(overwrite: false);
 
-               MessageBox.Show($"Done.\n\n{outFile}", "PomReport",
 
-                   MessageBoxButtons.OK, MessageBoxIcon.Information);
+            try {
 
-           }
+                var baseDir = Path.Combine(AppContext.BaseDirectory, "data");
 
-           catch (Exception ex)
+                var snapDir = Path.Combine(baseDir, "snapshots");
 
-           {
+                var cfgDir = Path.Combine(baseDir, "config");
 
-               Log(ex.ToString());
+                Directory.CreateDirectory(snapDir);
 
-               MessageBox.Show(ex.Message, "PomReport - Pull Error",
+                Directory.CreateDirectory(cfgDir);
 
-                   MessageBoxButtons.OK, MessageBoxIcon.Error);
+                var lineStatusPath = Path.Combine(cfgDir, "line_status.json");
 
-           }
+                var jobSortPath = Path.Combine(cfgDir, "job_sort.json");
 
-       }
+                var lsRepo = new LineStatusRepository(lineStatusPath);
 
-       // ------------------------------------------------------------
+                if (!File.Exists(lineStatusPath))
 
-       // BUTTON: Test Pipeline (Fake NewData -> Baseline(4h) -> Compare -> CleanData)
+                    await lsRepo.SaveAsync(FakeDataFactory.LineStatus());
 
-       // Writes outputs under BIN\data for quick testing.
+                var jsRepo = new JobSortRepository(jobSortPath);
 
-       // ------------------------------------------------------------
+                if (!File.Exists(jobSortPath))
 
-       private async void btnTestPipeline_Click(object sender, EventArgs e)
+                    await jsRepo.SaveAsync(FakeDataFactory.JobSortRules());
 
-       {
+                var lineStatus = await lsRepo.LoadAsync();
 
-           try
+                var jobSortMap = await jsRepo.LoadMapAsync();
 
-           {
+                var airplaneToLs = new Dictionary<string, LineStatusEntry>(StringComparer.OrdinalIgnoreCase);
 
-               var baseDir = Path.Combine(AppContext.BaseDirectory, "data");
+                foreach (var e2 in lineStatus) {
 
-               var snapDir = Path.Combine(baseDir, "snapshots");
+                    airplaneToLs[e2.VH] = e2;
 
-               var cfgDir = Path.Combine(baseDir, "config");
+                    airplaneToLs[e2.VZ] = e2;
 
-               Directory.CreateDirectory(snapDir);
+                }
 
-               Directory.CreateDirectory(cfgDir);
+                var store = new SnapshotStore(snapDir);
 
-               var lineStatusPath = Path.Combine(cfgDir, "line_status.json");
+                // Baseline older than 4 hours
 
-               var jobSortPath = Path.Combine(cfgDir, "job_sort.json");
+                var baseline = FakeDataFactory.BaselineSnapshot();
 
-               var lsRepo = new LineStatusRepository(lineStatusPath);
+                await store.SaveSnapshotAsync(baseline);
 
-               if (!File.Exists(lineStatusPath))
+                var current = FakeDataFactory.CurrentSnapshot();
 
-                   await lsRepo.SaveAsync(FakeDataFactory.LineStatus());
+                await store.SaveSnapshotAsync(current);
 
-               var jsRepo = new JobSortRepository(jobSortPath);
+                var baselineWindow = TimeSpan.FromHours(4);
 
-               if (!File.Exists(jobSortPath))
+                var chosenBaseline = await store.GetBaselineSnapshotAsync(baselineWindow, DateTimeOffset.UtcNow);
 
-                   await jsRepo.SaveAsync(FakeDataFactory.JobSortRules());
+                var compare = new CompareEngine()
 
-               var lineStatus = await lsRepo.LoadAsync();
+                    .Compare(current, chosenBaseline, jobSortMap);
 
-               var jobSortMap = await jsRepo.LoadMapAsync();
+                var clean = new CleanDataBuilder()
 
-               var airplaneToLs = new Dictionary<string, LineStatusEntry>(StringComparer.OrdinalIgnoreCase);
+                    .Build(current, compare, jobSortMap, airplaneToLs);
 
-               foreach (var e2 in lineStatus)
+                var outPath = Path.Combine(baseDir, "clean_preview.json");
 
-               {
+                await File.WriteAllTextAsync(
 
-                   airplaneToLs[e2.VH] = e2;
+                    outPath,
 
-                   airplaneToLs[e2.VZ] = e2;
+                    JsonSerializer.Serialize(clean, new JsonSerializerOptions { WriteIndented = true })
 
-               }
+                );
 
-               var store = new SnapshotStore(snapDir);
+                var msg =
 
-               // Baseline older than 4 hours
+                    $"Pipeline OK\r\n\r\n" +
 
-               var baseline = FakeDataFactory.BaselineSnapshot();
+                    $"New: {compare.NewJobs.Count}\r\n" +
 
-               await store.SaveSnapshotAsync(baseline);
+                    $"Completed: {compare.CompletedJobs.Count}\r\n" +
 
-               var current = FakeDataFactory.CurrentSnapshot();
+                    $"Comment Changed: {compare.CommentChangedJobs.Count}\r\n" +
 
-               await store.SaveSnapshotAsync(current);
+                    $"Sold: {compare.SoldJobs.Count}\r\n\r\n" +
 
-               var baselineWindow = TimeSpan.FromHours(4);
+                    $"Uncategorized JobNumbers: {compare.UncategorizedJobNumbers.Count}\r\n" +
 
-               var chosenBaseline = await store.GetBaselineSnapshotAsync(baselineWindow, DateTimeOffset.UtcNow);
+                    $"Groups: {clean.Groups.Count}\r\n" +
 
-               var compare = new CompareEngine()
+                    $"SellCount: {clean.SellCount}\r\n\r\n" +
 
-                   .Compare(current, chosenBaseline, jobSortMap);
+                    $"Wrote: {outPath}";
 
-               var clean = new CleanDataBuilder()
+                Log(msg);
 
-                   .Build(current, compare, jobSortMap, airplaneToLs);
+                MessageBox.Show(msg, "Pipeline Test");
 
-               var outPath = Path.Combine(baseDir, "clean_preview.json");
+            }
 
-               await File.WriteAllTextAsync(
+            catch (Exception ex) {
 
-                   outPath,
+                Log(ex.ToString());
 
-                   JsonSerializer.Serialize(clean, new JsonSerializerOptions { WriteIndented = true })
+                MessageBox.Show(ex.Message, "Pipeline Test Error");
 
-               );
+            }
 
-               var msg =
+        }
 
-                   $"Pipeline OK\r\n\r\n" +
+        private void Log(string message) {
 
-                   $"New: {compare.NewJobs.Count}\r\n" +
+            _log.AppendText(message + Environment.NewLine);
 
-                   $"Completed: {compare.CompletedJobs.Count}\r\n" +
+        }
 
-                   $"Comment Changed: {compare.CommentChangedJobs.Count}\r\n" +
-
-                   $"Sold: {compare.SoldJobs.Count}\r\n\r\n" +
-
-                   $"Uncategorized JobNumbers: {compare.UncategorizedJobNumbers.Count}\r\n" +
-
-                   $"Groups: {clean.Groups.Count}\r\n" +
-
-                   $"SellCount: {clean.SellCount}\r\n\r\n" +
-
-                   $"Wrote: {outPath}";
-
-               Log(msg);
-
-               MessageBox.Show(msg, "Pipeline Test");
-
-           }
-
-           catch (Exception ex)
-
-           {
-
-               Log(ex.ToString());
-
-               MessageBox.Show(ex.Message, "Pipeline Test Error");
-
-           }
-
-       }
-
-       private void Log(string message)
-
-       {
-
-           _log.AppendText(message + Environment.NewLine);
-
-       }
-
-   }
+    }
 
 }
- 
