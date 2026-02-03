@@ -7,6 +7,11 @@
 <ItemGroup>
 <Compile Remove="Scratch\**\*.cs" />
 </ItemGroup>
+<ItemGroup>
+<None Include="Copy_SQL_query.txt" >
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+</None>
+</ItemGroup>
 <PropertyGroup>
 <OutputType>WinExe</OutputType>
 <TargetFramework>net8.0-windows</TargetFramework>

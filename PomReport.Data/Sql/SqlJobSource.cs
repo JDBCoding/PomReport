@@ -2,6 +2,10 @@ using System;
 
 using System.Collections.Generic;
 
+using System.Data;
+
+using System.Data.OleDb;
+
 using System.Globalization;
 
 using System.IO;
@@ -10,13 +14,11 @@ using System.Linq;
 
 using System.Text;
 
+using System.Text.RegularExpressions;
+
 using System.Threading;
 
 using System.Threading.Tasks;
-
-using System.Data;
-
-using System.Data.OleDb;
 
 namespace PomReport.Data.Sql
 
@@ -26,27 +28,19 @@ namespace PomReport.Data.Sql
 
     {
 
-        // Optional default (you can ignore this and pass a connection string into PullToCsvAsync)
+        // Strict allow-list for VH / VZ tokens (prevents SQL injection)
 
-        public static string ConnectionString { get; set; } =
+        private static readonly Regex SafeToken =
 
-            "Server=YOURSERVER;Database=Newton_Release;Integrated Security=True;TrustServerCertificate=True;";
+            new Regex(@"^[A-Za-z0-9_-]{1,50}$", RegexOptions.Compiled);
 
-        public static async Task<bool> TestConnectionAsync(
+        /// <summary>
 
-            string connectionString,
+        /// Executes the provided SQL template, replaces {LINE_NUMBER_PARAMS}
 
-            CancellationToken ct = default)
+        /// with a VH/VZ IN-list, and writes the result to a CSV file.
 
-        {
-
-            await using var conn = new OleDbConnection(connectionString);
-
-            await conn.OpenAsync(ct);
-
-            return conn.State == System.Data.ConnectionState.Open;
-
-        }
+        /// </summary>
 
         public static async Task<string> PullToCsvAsync(
 
@@ -54,11 +48,9 @@ namespace PomReport.Data.Sql
 
             string sqlTemplate,
 
-            IEnumerable<string> lineNumbers,
+            IEnumerable<string> vhVzValues,
 
-            string outputFolder,
-
-            string filePrefix = "POM_DB_Pull",
+            string outputCsvFullPath,
 
             int commandTimeoutSeconds = 300,
 
@@ -74,82 +66,79 @@ namespace PomReport.Data.Sql
 
                 throw new ArgumentException("SQL template is empty.", nameof(sqlTemplate));
 
-            var inList = lineNumbers?
-
-                .Select(x => x!)
-
-                .Where(x => !string.IsNullOrWhiteSpace(x))
-
-                .ToList();
-
-            if (inList.Count == 0)
-
-                throw new ArgumentException("No line numbers provided.", nameof(lineNumbers));
-
-            // Build parameter names: @ln0,@ln1,...
-
-            var paramNames = inList.Select((_, i) => $"@ln{i}").ToList();
-
-            var inParams = string.Join(", ", paramNames);
-
             if (!sqlTemplate.Contains("{LINE_NUMBER_PARAMS}", StringComparison.Ordinal))
-
-            {
 
                 throw new InvalidOperationException(
 
-                    "SQL template must contain the token {LINE_NUMBER_PARAMS} where the IN (...) list belongs.");
+                    "SQL template must contain {LINE_NUMBER_PARAMS} for the IN (...) clause.");
+
+            // Normalize + validate VH / VZ list
+
+            var tokens = (vhVzValues ?? Enumerable.Empty<string>())
+
+                .Select(v => (v ?? "").Trim())
+
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+
+                .ToList();
+
+            if (tokens.Count == 0)
+
+                throw new InvalidOperationException("No VH/VZ values provided for SQL pull.");
+
+            foreach (var token in tokens)
+
+            {
+
+                if (!SafeToken.IsMatch(token))
+
+                    throw new InvalidOperationException(
+
+                        $"Invalid VH/VZ value '{token}'. Allowed: A-Z, a-z, 0-9, '_' and '-' (max 50 chars).");
 
             }
 
-            var sql = sqlTemplate.Replace("{LINE_NUMBER_PARAMS}", inParams);
+            // Build SQL IN-list:  'VH123','VZ456',...
 
-            Directory.CreateDirectory(outputFolder);
+            var inList = string.Join(", ", tokens.Select(t => $"'{t.Replace("'", "''")}'"));
 
-            var fileName = $"{filePrefix}_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+            var finalSql = sqlTemplate.Replace("{LINE_NUMBER_PARAMS}", inList);
 
-            var fullPath = Path.Combine(outputFolder, fileName);
+            var outDir = Path.GetDirectoryName(outputCsvFullPath);
+
+            if (!string.IsNullOrWhiteSpace(outDir))
+
+                Directory.CreateDirectory(outDir);
 
             await using var conn = new OleDbConnection(connectionString);
 
             await conn.OpenAsync(ct);
 
-            await using var cmd = new OleDbCommand("SELECT @@VERSION", conn);
-            var v = cmd.ExecuteScalar();
+            await using var cmd = new OleDbCommand(finalSql, conn)
 
             {
 
-                cmd.CommandTimeout = commandTimeoutSeconds;
+                CommandTimeout = commandTimeoutSeconds
 
             };
 
-            // Add parameters safely
-
-            for (int i = 0; i < inList.Count; i++)
-
-            {
-
-                // Adjust size if needed; 50 is usually plenty for VH/VZ/LineNumber values
-
-                cmd.Parameters.Add(new OleDbParameter
-
-                {
-
-                    OleDbType = OleDbType.VarChar,
-                    Size = 50,
-                    Value = inList[i]
-
-                });
-
-            }
-
             await using var reader = await cmd.ExecuteReaderAsync(ct);
 
-            await using var fs = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.Read);
+            await using var fs = new FileStream(
+
+                outputCsvFullPath,
+
+                FileMode.Create,
+
+                FileAccess.Write,
+
+                FileShare.Read);
 
             await using var sw = new StreamWriter(fs, new UTF8Encoding(false));
 
-            // Header row
+            // --- CSV HEADER ---
 
             for (int i = 0; i < reader.FieldCount; i++)
 
@@ -157,13 +146,13 @@ namespace PomReport.Data.Sql
 
                 if (i > 0) await sw.WriteAsync(",");
 
-                await sw.WriteAsync(Escape(reader.GetName(i)));
+                await sw.WriteAsync(EscapeCsv(reader.GetName(i)));
 
             }
 
             await sw.WriteLineAsync();
 
-            // Data rows
+            // --- CSV ROWS ---
 
             while (await reader.ReadAsync(ct))
 
@@ -175,7 +164,7 @@ namespace PomReport.Data.Sql
 
                     if (i > 0) await sw.WriteAsync(",");
 
-                    await sw.WriteAsync(Escape(ToInvariant(reader.GetValue(i))));
+                    await sw.WriteAsync(EscapeCsv(ToInvariantString(reader.GetValue(i))));
 
                 }
 
@@ -185,11 +174,17 @@ namespace PomReport.Data.Sql
 
             await sw.FlushAsync();
 
-            return fullPath;
+            return outputCsvFullPath;
 
         }
 
-        private static string ToInvariant(object? value)
+        // ------------------------------------------------------------
+
+        // Helpers
+
+        // ------------------------------------------------------------
+
+        private static string ToInvariantString(object? value)
 
         {
 
@@ -201,13 +196,13 @@ namespace PomReport.Data.Sql
 
             {
 
+                DateTime dt => dt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
+
                 decimal d => d.ToString(CultureInfo.InvariantCulture),
 
                 double d => d.ToString(CultureInfo.InvariantCulture),
 
                 float f => f.ToString(CultureInfo.InvariantCulture),
-
-                DateTime dt => dt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
 
                 _ => value.ToString() ?? ""
 
@@ -215,21 +210,21 @@ namespace PomReport.Data.Sql
 
         }
 
-        private static string Escape(string s)
+        private static string EscapeCsv(string value)
 
         {
 
-            if (s.Contains('"') || s.Contains(',') || s.Contains('\n') || s.Contains('\r'))
+            if (value.Contains('"') || value.Contains(',') || value.Contains('\n') || value.Contains('\r'))
 
             {
 
-                s = s.Replace("\"", "\"\"");
+                value = value.Replace("\"", "\"\"");
 
-                return $"\"{s}\"";
+                return $"\"{value}\"";
 
             }
 
-            return s;
+            return value;
 
         }
 
