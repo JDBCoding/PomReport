@@ -1,0 +1,752 @@
+/* Copy_SQL_query.txt
+
+   REQUIRED: keep {LINE_NUMBER_PARAMS} inside the LineNumber IN (...) clause exactly.
+
+*/
+
+WITH JobList AS
+
+(
+
+    SELECT
+
+        j.Program,
+
+        j.ProgramID,
+
+        j.SourceSystem,
+
+        j.JobID,
+
+        j.JobUniqueID,
+
+        j.LineNumber,
+
+        j.LineNumberID,
+
+        j.JobNumber,
+
+        j.DisplayJobNumber,
+
+        j.ParentJobNumber,
+
+        j.TopParentJobNumber,
+
+        j.ApaJoinJobNumber,
+
+        j.OrderNumber,
+
+        j.MesOrderID,
+
+        j.PartNumber,
+
+        -- Text / status-ish
+
+        j.Description,
+
+        j.JobType,
+
+        j.JobTypeDescription,
+
+        j.ExecutionStatus,
+
+        j.OrderStatus,
+
+        j.ScheduleStatus,
+
+        j.StatCode,
+
+        j.Status,
+
+        j.Shop,
+
+        -- MES levels
+
+        j.MesLevelId,
+
+        j.MesLevel1,
+
+        j.MesLevel2,
+
+        j.MesLevel3,
+
+        -- Dates
+
+        j.ScheduledStartTs,
+
+        j.ScheduledCompleteTs,
+
+        j.ActualStartTs,
+
+        j.ActualCompleteTs,
+
+        j.RecordUpdateTs,
+
+        j.RecordCreatedDateTimeUtc,
+
+        j.RecordLastUpdatedDateTimeUtc,
+
+        -- Flow / shift
+
+        j.Shift,
+
+        j.StartFlowday,
+
+        j.EndFlowday,
+
+        j.BarLine,
+
+        -- Hours
+
+        j.PlannedHours,
+
+        j.ActualHours,
+
+        j.RemainingHours,
+
+        j.PMASPlannedHours,
+
+        j.PMASRemainingHours,
+
+        -- Other fields commonly shown in “other app” exports (if present in vJob)
+
+        j.FirstAlert,
+
+        j.MesComments,
+
+        j.StepCount,
+
+        j.StepCountComplete,
+
+        j.DoWhatsDue,
+
+        j.MesTeam,
+
+        j.LaborTime,
+
+        j.MeGroupCode,
+
+        j.MesciHolds,
+
+        j.CallStatus,
+
+        j.CallboardAction,
+
+        -- If your vJob exposes these, they’ll come through; if not, remove them.
+
+        j.WorkArea,
+
+        j.WorkCenter,
+
+        j.WorkLocation,
+
+        j.CommitShift,
+
+        j.MesStart,
+
+        j.MesEnd,
+
+        j.RecoveryStart,
+
+        j.RecoveryEnd,
+
+        j.BaselineStart,
+
+        j.BaselineEnd,
+
+        j.Zone,
+
+        j.Priority,
+
+        j.GlobalPriority,
+
+        j.Explanation,
+
+        j.SlackTime,
+
+        j.LaborRequirements,
+
+        j.AdminTeam,
+
+        j.PercentComplete,
+
+        j.OrderScheduledStatus,
+
+        j.DeletedRowInd,
+
+
+    FROM Newton_Release.pbe.vJob j WITH (NOLOCK)
+
+    WHERE 1 = 1
+
+),
+
+/* Current assignment (user/team). EndDate NULL = current */
+
+Assigned AS
+
+(
+
+    SELECT
+
+        aj.Program,
+
+        aj.LineNumber,
+
+        aj.JobNumber,
+
+        aj.JobUniqueID,
+
+        aj.AssignmentType,
+
+        aj.AppUserID,
+
+        aj.BemsID,
+
+        aj.AssignedJobStartDateTimeUtc,
+
+        aj.AssignedJobEndDateTimeUtc
+
+    FROM Newton_Release.pbe.vAssignedJob aj WITH (NOLOCK)
+
+    WHERE 1 = 1
+
+      AND aj.AssignedJobEndDateTimeUtc IS NULL
+
+),
+
+/* Name lookup for AppUser (used by Assigned + comments) */
+
+Users AS
+
+(
+
+    SELECT
+
+        au.AppUserID,
+
+        au.BemsID,
+
+        au.FirstName,
+
+        au.LastName,
+
+        CONCAT(au.FirstName, ' ', au.LastName) AS DisplayName
+
+    FROM Newton_Release.pbe.vAppUser au WITH (NOLOCK)
+
+),
+
+/* Tech list (active assignments) */
+
+Technicians AS
+
+(
+
+    SELECT
+
+        a.Program,
+
+        a.LineNumber,
+
+        a.JobNumber,
+
+        STRING_AGG(u.DisplayName, ', ') WITHIN GROUP (ORDER BY u.LastName, u.FirstName) AS Technicians,
+
+        MAX(a.AssignmentType) AS AssignmentType
+
+    FROM Assigned a
+
+    LEFT JOIN Users u ON u.AppUserID = a.AppUserID
+
+    GROUP BY
+
+        a.Program,
+
+        a.LineNumber,
+
+        a.JobNumber
+
+),
+
+/* Tags: DailyPlan, ShopTag, HeldFor, WIP/DCMT flags, ECD from tag if your schema uses it */
+
+Tags AS
+
+(
+
+    SELECT
+
+        jt.JobID,
+
+        MAX(CASE WHEN jt.TagName = 'WIP'  THEN 1 END) AS WipFlag,
+
+        MAX(CASE WHEN jt.TagName = 'DCMT' THEN 1 END) AS DcmtFlag,
+
+        STRING_AGG(CASE WHEN jt.TagType = 'ShopTag' THEN jt.TagName END, ', ')
+
+            WITHIN GROUP (ORDER BY jt.TagName) AS ShopFlags,
+
+        STRING_AGG(CASE WHEN jt.TagType = 'HeldFor' THEN jt.TagName END, ', ')
+
+            WITHIN GROUP (ORDER BY jt.TagName) AS HeldFor,
+
+        MAX(CASE WHEN jt.TagType = 'DailyPlan' THEN 1 END) AS DailyPlanFlag,
+
+        MAX(jt.Ecd) AS ECD
+
+    FROM Newton_Release.pbe.vJobTag jt WITH (NOLOCK)
+
+    WHERE 1 = 1
+
+      AND jt.JobTagEndDateUtc IS NULL
+
+    GROUP BY jt.JobID
+
+),
+
+/* Latest milestone only */
+
+LatestMilestone AS
+
+(
+
+    SELECT
+
+        jm.Program,
+
+        jm.JobNumber,
+
+        jm.Milestone,
+
+        jm.Type,
+
+        jm.[Key],
+
+        jm.Legend,
+
+        jm.FlowDay,
+
+        jm.Shift,
+
+        ROW_NUMBER() OVER (PARTITION BY jm.Program, jm.JobNumber ORDER BY jm.FlowDay DESC, jm.Shift DESC) AS rn
+
+    FROM Newton_Release.pbe.vJobMilestone jm WITH (NOLOCK)
+
+),
+
+/* Latest comment only */
+
+LatestComment AS
+
+(
+
+    SELECT
+
+        jc.JobID,
+
+        jc.Comment,
+
+        jc.RecordCreatedDateTimeUtc,
+
+        jc.RecordLastUpdatedDateTimeUtc,
+
+        jc.AppUserID,
+
+        ROW_NUMBER() OVER (PARTITION BY jc.JobID ORDER BY jc.JobCommentID DESC) AS rn
+
+    FROM Newton_Release.pbe.vJobComment jc WITH (NOLOCK)
+
+    WHERE 1 = 1
+
+      AND jc.DeletedRowInd = 0
+
+),
+
+/* Contact (if you want phone/name) */
+
+Contact AS
+
+(
+
+    SELECT
+
+        c.Program,
+
+        c.LineNumber,
+
+        c.MesLevel1,
+
+        c.MesLevel3,
+
+        c.ContactBemsContactName,
+
+        c.ContactPhone
+
+    FROM Newton_Release.pbe.vJobContact c WITH (NOLOCK)
+
+),
+
+/* Critical chain (if present) */
+
+CriticalChain AS
+
+(
+
+    SELECT
+
+        cc.Program,
+
+        cc.JobNumber,
+
+        cc.DynamicCriticalChain,
+
+        cc.CriticalChain,
+
+        cc.CriticalChainJobImpact,
+
+        cc.CriticalChainLaborHourImpact,
+
+        cc.JobImpact,
+
+        cc.LaborHourImpact
+
+    FROM Newton_Release.pbe.vJobCriticalChain cc WITH (NOLOCK)
+
+),
+
+/* Counts (NCR/SAT/Shortage/Pickups) */
+
+Counts AS
+
+(
+
+    SELECT
+
+        a.Program,
+
+        a.JobNumber,
+
+        a.NcrsCount,
+
+        a.SatsCount,
+
+        a.PartShortagesCount,
+
+        a.PickUpsCount
+
+    FROM Newton_Release.pbe.vJobDwdAnalytics a WITH (NOLOCK)
+
+),
+
+/* Precedence text (if you want it) */
+
+Precedence AS
+
+(
+
+    SELECT
+
+        p.Program,
+
+        p.JobNumber,
+
+        p.Precedence
+
+    FROM Newton_Release.pbe.vJobPrecedenceApa p WITH (NOLOCK)
+
+)
+
+SELECT
+
+    -- Core identifiers
+
+    jl.LineNumber,
+
+    jl.LineNumberID,
+
+    jl.JobID,
+
+    jl.JobUniqueID,
+
+    jl.Program,
+
+    jl.ProgramID,
+
+    jl.MesLevelId,
+
+    jl.JobNumber,
+
+    jl.DisplayJobNumber,
+
+    jl.OrderNumber,
+
+    jl.MesOrderID,
+
+    jl.ParentJobNumber,
+
+    jl.TopParentJobNumber,
+
+    jl.ApaJoinJobNumber,
+
+    -- Description / location
+
+    jl.Description,
+
+    jl.WorkArea,
+
+    jl.WorkCenter,
+
+    jl.WorkLocation,
+
+    jl.SourceSystem AS [Source],
+
+    jl.StatCode,
+
+    jl.Status,
+
+    jl.Shop,
+
+    -- Flow/shift + dates
+
+    jl.StartFlowday,
+
+    jl.EndFlowday,
+
+    jl.Shift,
+
+    jl.CommitShift,
+
+    jl.MesStart,
+
+    jl.MesEnd,
+
+    jl.RecoveryStart,
+
+    jl.RecoveryEnd,
+
+    jl.BaselineStart,
+
+    jl.BaselineEnd,
+
+    -- Hours
+
+    jl.ActualHours,
+
+    jl.RemainingHours,
+
+    jl.PlannedHours,
+
+    jl.PMASPlannedHours,
+
+    jl.PMASRemainingHours,
+
+    -- Priority / CC
+
+    jl.Zone,
+
+    jl.Priority,
+
+    jl.GlobalPriority,
+
+    cc.DynamicCriticalChain,
+
+    cc.CriticalChain,
+
+    cc.JobImpact,
+
+    cc.CriticalChainJobImpact,
+
+    cc.LaborHourImpact,
+
+    cc.CriticalChainLaborHourImpact,
+
+    jl.Explanation,
+
+    jl.SlackTime,
+
+    jl.LaborRequirements,
+
+    -- Status-ish extras
+
+    jl.OrderStatus,
+
+    jl.ScheduleStatus,
+
+    jl.OrderScheduledStatus,
+
+    jl.ExecutionStatus,
+
+    jl.PercentComplete,
+
+    jl.FirstAlert,
+
+    jl.MesComments,
+
+    jl.StepCount,
+
+    jl.StepCountComplete,
+
+    jl.DoWhatsDue,
+
+    jl.CallboardAction,
+
+    jl.CallStatus,
+
+    jl.MeGroupCode,
+
+    jl.MesTeam,
+
+    jl.LaborTime,
+
+    jl.MesciHolds,
+
+    jl.AdminTeam,
+
+    -- “Counts” (if your vJob already has these, you can drop this and just use jl.* equivalents)
+
+    cts.NcrsCount,
+
+    cts.SatsCount,
+
+    cts.PartShortagesCount,
+
+    cts.PickUpsCount,
+
+    -- Tags / flags
+
+    t.ShopFlags,
+
+    CASE
+
+        WHEN t.WipFlag = 1 THEN 'WIP'
+
+        WHEN t.DcmtFlag = 1 THEN 'DCMT'
+
+        ELSE ''
+
+    END AS ShopFlag,
+
+    CASE WHEN t.DailyPlanFlag = 1 THEN 'Y' ELSE '' END AS DailyPlan,
+
+    t.ECD,
+
+    t.HeldFor,
+
+    -- Techs / assignment
+
+    tech.Technicians,
+
+    tech.AssignmentType,
+
+    -- Latest milestone
+
+    lm.Milestone AS LatestMilestone,
+
+    lm.Type      AS LatestMilestoneType,
+
+    lm.[Key]     AS LatestMilestoneKey,
+
+    lm.Legend    AS LatestMilestoneLegend,
+
+    lm.FlowDay   AS LatestMilestoneFlowDay,
+
+    lm.Shift     AS LatestMilestoneShift,
+
+    -- Latest comment + who/when
+
+    lc.Comment AS Comments,
+
+    lc.RecordLastUpdatedDateTimeUtc AS commentLastUpdated,
+
+    ucom.DisplayName AS CommentBy,
+
+    -- Contact
+
+    con.ContactBemsContactName,
+
+    con.ContactPhone,
+
+    -- Precedence
+
+    prec.Precedence,
+
+    -- Other
+
+
+FROM JobList jl
+
+LEFT JOIN Tags t
+
+    ON t.JobID = jl.JobID
+
+LEFT JOIN Technicians tech
+
+    ON tech.Program   = jl.Program
+
+   AND tech.LineNumber = jl.LineNumber
+
+   AND tech.JobNumber  = jl.JobNumber
+
+LEFT JOIN LatestMilestone lm
+
+    ON lm.Program  = jl.Program
+
+   AND lm.JobNumber = jl.JobNumber
+
+   AND lm.rn = 1
+
+LEFT JOIN LatestComment lc
+
+    ON lc.JobID = jl.JobID
+
+   AND lc.rn = 1
+
+LEFT JOIN Users ucom
+
+    ON ucom.AppUserID = lc.AppUserID
+
+LEFT JOIN Contact con
+
+    ON con.Program = jl.Program
+
+   AND con.LineNumber = jl.LineNumber
+
+   AND con.MesLevel1 = jl.MesLevel1
+
+   AND con.MesLevel3 = jl.MesLevel3
+
+LEFT JOIN CriticalChain cc
+
+    ON cc.Program = jl.Program
+
+   AND cc.JobNumber = jl.JobNumber
+
+LEFT JOIN Counts cts
+
+    ON cts.Program = jl.Program
+
+   AND cts.JobNumber = jl.JobNumber
+
+LEFT JOIN Precedence prec
+
+    ON prec.Program = jl.Program
+
+   AND prec.JobNumber = jl.JobNumber
+
+WHERE 1=1
+
+  AND jl.Program = '842'
+
+  AND jl.SourceSystem = 'MES'
+
+  AND jl.Status = 'Open'
+
+  AND jl.LineNumber IN ({LINE_NUMBER_PARAMS})
+
+ORDER BY
+
+    jl.LineNumber,
+
+    jl.JobNumber;
+ 

@@ -10,6 +10,8 @@ using System.Collections.Generic;
 
 using System.Windows.Forms;
 
+using System.Diagnostics;
+
 using PomReport.Config;
 
 using PomReport.Config.Models;
@@ -50,9 +52,11 @@ namespace PomReport.App {
 
         private static JobMappingRepository CreateJobMapRepo() {
 
-            var path = JobMappingRepository.GetDefaultPath();
+            // Repository chooses the canonical location (bin\data\config\job_mapping.csv)
 
-            return new JobMappingRepository(path);
+            // so SetupForm doesn't need to know any file paths.
+
+            return new JobMappingRepository();
 
         }
 
@@ -182,7 +186,7 @@ namespace PomReport.App {
 
             };
 
-            // Job mapping controls (wired up in InitJobMappingUi)
+            // Job mapping controls (wired up below)
 
             var lblJobMap = new Label {
 
@@ -268,37 +272,128 @@ namespace PomReport.App {
 
             Controls.Add(btnCancel);
 
-            // Hook events here, but implemented using repo methods that exist.
+            // Open/Create: opens the canonical CSV that the app uses (and creates a template if missing).
 
-            btnOpenOrCreateJobMap.Click += (s, e) => {
+            btnOpenOrCreateJobMap.Click += (s, e) =>
+
+            {
 
                 var repo = CreateJobMapRepo();
+
                 repo.EnsureTemplateExists();
-                try {
-                    var src = ofd.FileName;
-                    var dest = repo.FilePath;
-                    // If they picked the canonical file itself, do nothing.
-                    if (!string.Equals(
-                            Path.GetFullPath(src),
-                            Path.GetFullPath(dest),
-                            StringComparison.OrdinalIgnoreCase)) {
+
+                var path = repo.FilePath;
+
+                try
+
+                {
+
+                    Process.Start(new ProcessStartInfo
+
+                    {
+
+                        FileName = path,
+
+                        UseShellExecute = true,
+
+                    });
+
+                }
+
+                catch
+
+                {
+
+                    // If opening fails (policy/IT), at least show the path.
+
+                    MessageBox.Show(path, "Job Mapping CSV Location", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                }
+
+                txtJobMappingPath.Text = path;
+
+                LoadJobMappingGrid(repo);
+
+            };
+
+            // Load CSV: user selects a CSV, and we copy it over the canonical job_mapping.csv.
+
+            btnLoadJobMap.Click += (s, e) =>
+
+            {
+
+                using var ofd = new OpenFileDialog
+
+                {
+
+                    Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*",
+
+                    Title = "Select Job Mapping CSV",
+
+                    CheckFileExists = true,
+
+                };
+
+                if (ofd.ShowDialog(this) != DialogResult.OK)
+
+                    return;
+
+                var repo = CreateJobMapRepo();
+
+                repo.EnsureTemplateExists();
+
+                var src = ofd.FileName;
+
+                var dest = repo.FilePath;
+
+                try
+
+                {
+
+                    // If they picked the canonical file itself, nothing to copy.
+
+                    if (!string.Equals(Path.GetFullPath(src), Path.GetFullPath(dest), StringComparison.OrdinalIgnoreCase))
+
+                    {
+
                         Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+
                         File.Copy(src, dest, overwrite: true);
+
                     }
-                    txtJobMappingPath.Text = repo.FilePath;
+
+                    txtJobMappingPath.Text = dest;
+
                     LoadJobMappingGrid(repo);
+
                 }
-                catch (IOException ioEx) {
+
+                catch (IOException ioEx)
+
+                {
+
                     MessageBox.Show(
+
                         "Couldn't update job_mapping.csv because it is locked (usually Excel).\n\n" +
+
                         "Close the CSV (and any Excel window using it), then try again.\n\n" +
+
                         ioEx.Message,
+
                         "Job Mapping CSV Locked",
+
                         MessageBoxButtons.OK,
+
                         MessageBoxIcon.Warning);
+
                 }
-                catch (Exception ex) {
+
+                catch (Exception ex)
+
+                {
+
                     MessageBox.Show(ex.Message, "Job Mapping Import Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+
                 }
 
             };
@@ -477,15 +572,15 @@ namespace PomReport.App {
 
                         return new JobCategoryMap {
 
-                            Ip = parts[0].Trim(),
+                            Ip = (parts[0] ?? "").Trim(),
 
-                            Category = parts.Length > 1 ? parts[1].Trim() : ""
+                            Category = (parts.Length > 1 ? parts[1] : "").Trim()
 
                         };
 
                     })
 
-                    .Where(m => !string.IsNullOrWhiteSpace(m.Ip))
+                    .Where(m => !string.IsNullOrWhiteSpace(m.Ip) && !string.IsNullOrWhiteSpace(m.Category))
 
                     .ToList();
 
@@ -508,3 +603,4 @@ namespace PomReport.App {
     }
 
 }
+ 
