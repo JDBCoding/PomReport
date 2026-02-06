@@ -8,8 +8,8 @@
 <Compile Remove="Scratch\**\*.cs" />
 </ItemGroup>
 <ItemGroup>
-<None Include="Copy_SQL_query.txt" >
-    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+<None Include="Copy_SQL_query.txt">
+<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 </None>
 </ItemGroup>
 <PropertyGroup>
@@ -20,4 +20,3 @@
 <ImplicitUsings>enable</ImplicitUsings>
 </PropertyGroup>
 </Project>
- 
