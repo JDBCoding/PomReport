@@ -186,6 +186,10 @@ namespace PomReport.App {
 
             };
 
+            // This box is intentionally blank until you define mappings.
+            // Use placeholder examples so users understand the format without saving dummy rows.
+            txtCategories.PlaceholderText = "IP100=Hydraulics\r\nIP200=Electrical";
+
             // Job mapping controls (wired up below)
 
             var lblJobMap = new Label {
@@ -200,27 +204,46 @@ namespace PomReport.App {
 
             };
 
-            txtJobMappingPath = new TextBox {
-
+            // Put the path + buttons in a dedicated row panel so they never get clipped/overlapped
+            // (DPI scaling was causing the grid below to cover the buttons).
+            var pnlJobMapRow = new Panel {
                 Left = 15,
-
-                Top = 630,
-
-                Width = 650,
-
-                ReadOnly = true
-
+                Top = 628,
+                Width = 930,
+                Height = 36,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
 
-            var btnOpenOrCreateJobMap = new Button { Left = 675, Top = 628, Width = 130, Text = "Open/Create" };
+            txtJobMappingPath = new TextBox {
+                Left = 0,
+                Top = 6,
+                Width = 650,
+                ReadOnly = true,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            };
 
-            var btnLoadJobMap = new Button { Left = 815, Top = 628, Width = 130, Text = "Load CSV..." };
+            var btnLoadJobMap = new Button { Width = 130, Height = 26, Text = "Load CSV...", Anchor = AnchorStyles.Top | AnchorStyles.Right };
+            var btnOpenOrCreateJobMap = new Button { Width = 130, Height = 26, Text = "Open/Create", Anchor = AnchorStyles.Top | AnchorStyles.Right };
+
+            // Set initial right-anchored positions (anchoring will keep their right margin on resize)
+            btnLoadJobMap.Left = pnlJobMapRow.Width - btnLoadJobMap.Width;
+            btnLoadJobMap.Top = 4;
+            btnOpenOrCreateJobMap.Left = btnLoadJobMap.Left - 10 - btnOpenOrCreateJobMap.Width;
+            btnOpenOrCreateJobMap.Top = 4;
+
+            // Keep the textbox from running under the buttons
+            txtJobMappingPath.Width = btnOpenOrCreateJobMap.Left - 10;
+
+            pnlJobMapRow.Controls.Add(txtJobMappingPath);
+            pnlJobMapRow.Controls.Add(btnOpenOrCreateJobMap);
+            pnlJobMapRow.Controls.Add(btnLoadJobMap);
 
             dgvJobMapping = new DataGridView {
 
                 Left = 15,
 
-                Top = 660,
+                // Start below the row panel so the buttons can never be covered.
+                Top = 672,
 
                 Width = 930,
 
@@ -238,9 +261,17 @@ namespace PomReport.App {
 
             };
 
+            // Anchors so resizing/DPI changes don't cause overlap
+            dgvAirplanes.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            txtCategories.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            dgvJobMapping.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
+
             btnSave = new Button { Left = 15, Top = 890, Width = 160, Text = "Save" };
 
             btnCancel = new Button { Left = 190, Top = 890, Width = 160, Text = "Cancel" };
+
+            btnSave.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            btnCancel.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
 
             btnSave.Click += BtnSave_Click;
 
@@ -260,11 +291,7 @@ namespace PomReport.App {
 
             Controls.Add(lblJobMap);
 
-            Controls.Add(txtJobMappingPath);
-
-            Controls.Add(btnOpenOrCreateJobMap);
-
-            Controls.Add(btnLoadJobMap);
+            Controls.Add(pnlJobMapRow);
 
             Controls.Add(dgvJobMapping);
 

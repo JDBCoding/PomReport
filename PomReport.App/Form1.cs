@@ -8,6 +8,8 @@ using System.Threading;
 using System.Windows.Forms;
 using PomReport.Config;
 using PomReport.Config.Models;
+using PomReport.Core.Services;
+using PomReport.Data.Csv;
 using PomReport.Data.Sql;
 namespace PomReport.App {
     public partial class Form1 : Form {
@@ -165,11 +167,97 @@ namespace PomReport.App {
                     newCsv,
                     commandTimeoutSeconds: 300,
                     ct: cts.Token);
+
+                // NCR one-off categorization (human-in-the-loop, ask once and remember)
+                TryCategorizeNewNcrJobs(newCsv);
+
                 MessageBox.Show($"Pull complete.\n\n{newCsv}", "PomReport", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex) {
                 MessageBox.Show(ex.Message, "Pull Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        private void TryCategorizeNewNcrJobs(string newCsvPath)
+        {
+            try
+            {
+                // Load jobs from the newly pulled CSV
+                var jobs = CsvJobSource.Load(newCsvPath);
+
+                // Identify NCR rows and extract NCR ids
+                var ncrRows = jobs
+                    .Select(j => new { Job = j, NcrId = NcrIdParser.TryExtract(j.JobKitDescription) })
+                    .Where(x => x.NcrId != null)
+                    .ToList();
+
+                if (ncrRows.Count == 0)
+                    return;
+
+                var repo = new NcrOverrideRepository(NcrOverrideRepository.DefaultPath());
+                var map = repo.Load();
+
+                // Find NCR ids we have not categorized yet
+                var missing = ncrRows
+                    .Select(x => x.NcrId!)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Where(id => !map.ContainsKey(id))
+                    .ToList();
+
+                if (missing.Count == 0)
+                    return; // nothing new
+
+                // Build UI rows for missing NCRs (show a useful summary per NCR id)
+                var items = missing.Select(id =>
+                {
+                    var sample = ncrRows.First(x => id.Equals(x.NcrId, StringComparison.OrdinalIgnoreCase)).Job;
+                    return new NcrCategorizationItem(
+                        NcrId: id,
+                        LineNumber: sample.LineNumber,
+                        WorkOrder: sample.WorkOrder,
+                        Summary: BuildNcrSummary(sample));
+                }).ToList();
+
+                using var dlg = new NcrCategorizationForm(items);
+                if (dlg.ShowDialog(this) != DialogResult.OK)
+                    return;
+
+                foreach (var kvp in dlg.Results)
+                {
+                    // enforce allowed categories
+                    if (!NcrCategorizationForm.AllowedCategories.Contains(kvp.Value, StringComparer.OrdinalIgnoreCase))
+                        continue;
+
+                    map[kvp.Key] = kvp.Value;
+                }
+
+                repo.Save(map);
+            }
+            catch
+            {
+                // This feature should never block the pull.
+            }
+        }
+
+        private static string BuildNcrSummary(PomReport.Core.Core.Models.JobRecord j)
+        {
+            // Keep this short; user can open the CSV for full detail.
+            var desc = (j.JobKitDescription ?? "").Trim();
+            var notes = (j.JobNotes ?? "").Trim();
+            var comments = (j.JobComments ?? "").Trim();
+
+            string Take(string s, int max)
+            {
+                if (string.IsNullOrWhiteSpace(s)) return "";
+                s = s.Replace("\r", " ").Replace("\n", " ").Trim();
+                return s.Length <= max ? s : s.Substring(0, max) + "…";
+            }
+
+            var parts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(desc)) parts.Add(Take(desc, 90));
+            if (!string.IsNullOrWhiteSpace(notes) && notes != "-") parts.Add("Notes: " + Take(notes, 80));
+            if (!string.IsNullOrWhiteSpace(comments) && comments != "-") parts.Add("Comment: " + Take(comments, 80));
+            return string.Join(" | ", parts);
         }
     }
 }
