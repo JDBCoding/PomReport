@@ -19,6 +19,7 @@ namespace PomReport.App {
         private DataGridView? _grid;
         private Button? _btnSetup;
         private Button? _btnPull;
+        private Button? _btnReport;
         public Form1() {
             InitializeComponent();
             Text = "POM Report Generator";
@@ -45,6 +46,9 @@ namespace PomReport.App {
             _btnPull = new Button { Text = "Pull Data", Width = 110, Height = 28, Margin = new Padding(8, 2, 0, 0) };
             _btnPull.Click += btnPull_Click;
             btnRow.Controls.Add(_btnPull);
+            _btnReport = new Button { Text = "Generate Report", Width = 140, Height = 28, Margin = new Padding(8, 2, 0, 0) };
+            _btnReport.Click += btnTestPipeline_Click;   // uses the existing preview pipeline
+            btnRow.Controls.Add(_btnReport);
             _grid = new DataGridView {
                 Width = 760,
                 Height = 200,
@@ -127,8 +131,7 @@ namespace PomReport.App {
             btnPull_Click(sender, e);
         }
         private void btnTestPipeline_Click(object sender, EventArgs e) {
-            try
-            {
+            try {
                 var cfg = ConfigStore.Load();
                 var exportDir = Path.Combine(AppContext.BaseDirectory, cfg.ExportFolderName ?? "exports");
                 Directory.CreateDirectory(exportDir);
@@ -140,8 +143,7 @@ namespace PomReport.App {
 
                 ReportPreviewService.OpenInDefaultBrowser(previewPath);
             }
-            catch (Exception ex)
-            {
+            catch (Exception ex) {
                 MessageBox.Show(ex.Message, "Report Preview Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -193,10 +195,8 @@ namespace PomReport.App {
             }
         }
 
-        private void TryCategorizeNewNcrJobs(string newCsvPath)
-        {
-            try
-            {
+        private void TryCategorizeNewNcrJobs(string newCsvPath) {
+            try {
                 // Load jobs from the newly pulled CSV
                 var jobs = CsvJobSource.Load(newCsvPath);
 
@@ -223,8 +223,7 @@ namespace PomReport.App {
                     return; // nothing new
 
                 // Build UI rows for missing NCRs (show a useful summary per NCR id)
-                var items = missing.Select(id =>
-                {
+                var items = missing.Select(id => {
                     var sample = ncrRows.First(x => id.Equals(x.NcrId, StringComparison.OrdinalIgnoreCase)).Job;
                     return new NcrCategorizationItem(
                         NcrId: id,
@@ -237,8 +236,7 @@ namespace PomReport.App {
                 if (dlg.ShowDialog(this) != DialogResult.OK)
                     return;
 
-                foreach (var kvp in dlg.Results)
-                {
+                foreach (var kvp in dlg.Results) {
                     // enforce allowed categories
                     if (!NcrCategorizationForm.AllowedCategories.Contains(kvp.Value, StringComparer.OrdinalIgnoreCase))
                         continue;
@@ -248,21 +246,18 @@ namespace PomReport.App {
 
                 repo.Save(map);
             }
-            catch
-            {
+            catch {
                 // This feature should never block the pull.
             }
         }
 
-        private static string BuildNcrSummary(PomReport.Core.Core.Models.JobRecord j)
-        {
+        private static string BuildNcrSummary(PomReport.Core.Core.Models.JobRecord j) {
             // Keep this short; user can open the CSV for full detail.
             var desc = (j.JobKitDescription ?? "").Trim();
             var notes = (j.JobNotes ?? "").Trim();
             var comments = (j.JobComments ?? "").Trim();
 
-            string Take(string s, int max)
-            {
+            string Take(string s, int max) {
                 if (string.IsNullOrWhiteSpace(s)) return "";
                 s = s.Replace("\r", " ").Replace("\n", " ").Trim();
                 return s.Length <= max ? s : s.Substring(0, max) + "…";
