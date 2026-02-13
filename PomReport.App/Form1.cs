@@ -8,6 +8,7 @@ using System.Threading;
 using System.Windows.Forms;
 using PomReport.Config;
 using PomReport.Config.Models;
+using PomReport.App.Reporting;
 using PomReport.Core.Services;
 using PomReport.Data.Csv;
 using PomReport.Data.Sql;
@@ -126,9 +127,23 @@ namespace PomReport.App {
             btnPull_Click(sender, e);
         }
         private void btnTestPipeline_Click(object sender, EventArgs e) {
-            // If you still want the old pipeline test button to do something,
-            // call your existing test method here (or leave it empty).
-            MessageBox.Show("Test Pipeline is not wired in this build.", "PomReport");
+            try
+            {
+                var cfg = ConfigStore.Load();
+                var exportDir = Path.Combine(AppContext.BaseDirectory, cfg.ExportFolderName ?? "exports");
+                Directory.CreateDirectory(exportDir);
+
+                var previewPath = ReportPreviewService.GenerateHtmlPreview(
+                    exportDir: exportDir,
+                    shopName: cfg.ShopName ?? "",
+                    airplanePairs: _pairs.ToList());
+
+                ReportPreviewService.OpenInDefaultBrowser(previewPath);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Report Preview Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
         private async void btnPull_Click(object? sender, EventArgs e) {
             try {
